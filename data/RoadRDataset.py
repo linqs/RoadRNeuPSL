@@ -1,4 +1,5 @@
 import json
+import logging
 import numpy as np
 import os
 import torch
@@ -23,14 +24,13 @@ LABEL_TYPE_OFFSETS = {
 NUM_CLASSES = 41
 MAX_BOUNDING_BOXES_PER_FRAME = 25
 
-DEBUG = True
-DEBUG_MAX_FRAMES = 10
-
 
 class RoadRDataset(torch_utils.data.Dataset):
-    def __init__(self, videos, data_path):
+    def __init__(self, videos, data_path, max_frames=None):
         self.labeled_videos = videos
         self.data_path = data_path
+        self.max_frames = max_frames
+
         self.frames = None
         self.images = None
         self.labels = None
@@ -43,51 +43,51 @@ class RoadRDataset(torch_utils.data.Dataset):
         self.load_data()
 
     def load_data(self):
-        print("Loading data...")
+        logging.info("Loading raw json data: {0}".format(self.data_path))
         with open(self.data_path, 'r') as data_file:
             json_data = json.load(data_file)
-        print("Data loaded.")
 
         database = json_data['db']
 
-        # Count the number of frames to preallocate memory.
+        logging.debug("Counting total frames in all videos for allocation.")
         num_frames = 0
-        print("Counting frames...")
         for videoname in sorted(database.keys()):
             if not videoname in self.labeled_videos:
                 continue
 
+            logging.debug("Counting frames for video: {0}".format(videoname))
+
             for frame_name in database[videoname]['frames']:
-                if DEBUG and num_frames >= DEBUG_MAX_FRAMES:
+                if self.max_frames is not None and num_frames >= self.max_frames:
                     break
 
                 frame = database[videoname]['frames'][frame_name]
 
-                # 127 frames in the train validation set not annotated.
                 if "annos" not in frame:
                     continue
 
                 num_frames += 1
-        print("Frames counted: {0}".format(num_frames))
+        logging.debug("Total frames counted in all videos: {0}".format(num_frames))
 
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
         self.images = torch.empty(size=(num_frames, 3, int(IMAGE_HEIGHT * IMAGE_RESIZE), int(IMAGE_WIDTH * IMAGE_RESIZE)), dtype=torch.float32)
         self.labels = torch.empty(size=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES), dtype=torch.int8)
         self.boxes = torch.empty(size=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, 4), dtype=torch.float32)
 
+        logging.info("Loading frames for all videos.")
         frame_index = 0
         for videoname in sorted(database.keys()):
-            print("Loading frames from video {0}...".format(videoname))
             if not videoname in self.labeled_videos:
                 continue
 
+            logging.debug("Loading frames for video: {0}".format(videoname))
+
             for frame_name in database[videoname]['frames']:
-                if DEBUG and frame_index >= DEBUG_MAX_FRAMES:
+                if self.max_frames is not None and frame_index >= self.max_frames:
                     break
 
                 frame = database[videoname]['frames'][frame_name]
 
-                # 127 frames in the train validation set not annotated.
                 if "annos" not in frame:
                     continue
 
@@ -107,7 +107,9 @@ class RoadRDataset(torch_utils.data.Dataset):
                 self.boxes[frame_index] = frame_boxes
 
                 frame_index += 1
-            print("Frames loaded: {0}".format(frame_index))
+
+            logging.debug("Frames loaded: {0}".format(frame_index))
+        logging.info("Total frames loaded for all videos: {0}".format(frame_index))
 
     def __len__(self):
         return len(self.frames)

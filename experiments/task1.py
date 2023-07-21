@@ -1,12 +1,15 @@
+import logging
 import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+import logger
 import utils
 
 from data.RoadRDataset import RoadRDataset
 
+LOGGING_LEVEL = logging.DEBUG
 SEED = 42
 
 TASK_NAME = "task1"
@@ -19,12 +22,17 @@ THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 DATA_FILE_NAME = 'road_trainval_v1.0.json'
 DATA_DIR = os.path.join(THIS_DIR, "../data")
 
+MAX_FRAMES = 100
+
 
 def main():
     utils.seed_everything(42)
 
+    logger.initLogging(LOGGING_LEVEL)
+
     # Load training dataset.
-    train_dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME))
+    logging.info("Loading training dataset.")
+    train_dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME), max_frames=MAX_FRAMES)
 
     # Preprocess training dataset.
 
