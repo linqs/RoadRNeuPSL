@@ -17,7 +17,7 @@ function main() {
   fi
 
   # Run task1.
-  python3 task1.py
+  python3 experiments/task1.py
 }
 
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
