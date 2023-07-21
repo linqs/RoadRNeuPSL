@@ -113,4 +113,4 @@ class RoadRDataset(torch_utils.data.Dataset):
         return len(self.frames)
 
     def __getitem__(self, index):
-        return self.frames[index], self.labels[index], self.boxes[index]
+        return self.frames[index], self.images[index], self.labels[index], self.boxes[index]
