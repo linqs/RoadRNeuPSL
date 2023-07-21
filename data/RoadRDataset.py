@@ -3,6 +3,7 @@ import numpy as np
 import os
 import torch
 import torch.utils as torch_utils
+import torchvision.io
 
 THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
@@ -22,6 +23,7 @@ class RoadRDataset(torch_utils.data.Dataset):
         self.labeled_videos = videos
         self.data_path = data_path
         self.frames = None
+        self.images = None
         self.labels = None
         self.boxes = None
 
@@ -49,6 +51,7 @@ class RoadRDataset(torch_utils.data.Dataset):
                 num_frames += 1
 
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
+        self.images = np.empty(shape=(num_frames, 3, 960, 1280), dtype=np.uint8)
         self.labels = np.empty(shape=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES), dtype=np.int8)
         self.boxes = np.empty(shape=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, 4), dtype=np.float32)
 
@@ -64,6 +67,7 @@ class RoadRDataset(torch_utils.data.Dataset):
                 if "annos" not in frame:
                     continue
 
+                self.images[frame_index] = torchvision.io.read_image(os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id'])))
                 self.frames[frame_index] = [videoname, str(frame['rgb_image_id'])]
 
                 # Extract labels and box coordinate for each box in the frame.
