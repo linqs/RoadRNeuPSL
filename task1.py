@@ -16,8 +16,6 @@ DATA_DIR = os.path.join(THIS_DIR, "data")
 def main():
     train_dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME))
 
-    print(train_dataset[0])
-
 
 if __name__ == "__main__":
     main()

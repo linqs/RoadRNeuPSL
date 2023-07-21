@@ -15,6 +15,9 @@ function main() {
   else
     python3 data/extract_videos2jpgs.py "${THIS_DIR}/data"
   fi
+
+  # Run task1.
+  python3 task1.py
 }
 
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"

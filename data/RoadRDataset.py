@@ -48,7 +48,7 @@ class RoadRDataset(torch_utils.data.Dataset):
 
                 num_frames += 1
 
-        self.frames = np.empty(shape=(num_frames, 2), dtype=np.unicode_)  # (video_id, frame_id)
+        self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
         self.labels = np.empty(shape=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES), dtype=np.int8)
         self.boxes = np.empty(shape=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, 4), dtype=np.float32)
 
@@ -64,7 +64,7 @@ class RoadRDataset(torch_utils.data.Dataset):
                 if "annos" not in frame:
                     continue
 
-                self.frames[frame_index] = [videoname, frame['rgb_image_id']]
+                self.frames[frame_index] = [videoname, str(frame['rgb_image_id'])]
 
                 # Extract labels and box coordinate for each box in the frame.
                 frame_labels = np.zeros(shape=(MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES))
