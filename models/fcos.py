@@ -19,12 +19,11 @@ from models.losses import simple_loss as loss
 class FCOSNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
         super().__init__()
-        self._application = None
         self._model = None
         self._predictions = None
 
     def internal_init_model(self, application, options={}):
-        self._model = torchvision.models.detection.fasterrcnn_resnet50_fpn(num_classes=RoadRDataset.NUM_CLASSES)
+        self._model = torchvision.models.detection.fcos_resnet50_fpn(num_classes=RoadRDataset.NUM_CLASSES)
         return {}
 
     def internal_fit(self, data, gradients, options={}):
@@ -32,13 +31,19 @@ class FCOSNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {}
 
     def internal_predict(self, data, options={}):
-        if self._application == 'learning':
+        results = {}
+        if options["learn"]:
+            results['mode'] = 'learning'
             self._model.train()
         else:
+            results['mode'] = 'inference'
             self._model.eval()
 
-        self._predictions = self._model([data[0][1]])
-        return {}
+        # TODO(Charles): Model prediction requires 'targets' in training mode.
+        #  This is the target bounding boxes for the image.
+        #  Targets are required because the fcos model computes a loss during prediction in the torchvision implementation.
+        self._predictions = self._model(data)
+        return self._predictions, results
 
     def internal_eval(self, data, options={}):
         return {}
