@@ -14,16 +14,20 @@ import utils
 
 import data.RoadRDataset as RoadRDataset
 from models.losses import simple_loss as loss
+from models.DETR import DETR
 
 
-class FCOSNeuPSL(pslpython.deeppsl.model.DeepModel):
+"""
+DETR Model from: <https://arxiv.org/pdf/2005.12872.pdf>
+"""
+class DETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
         super().__init__()
         self._model = None
         self._predictions = None
 
     def internal_init_model(self, application, options={}):
-        self._model = torchvision.models.detection.fcos_resnet50_fpn(num_classes=RoadRDataset.NUM_CLASSES)
+        self._model = DETR()
         return {}
 
     def internal_fit(self, data, gradients, options={}):
