@@ -30,10 +30,6 @@ class DETR(torch.nn.Module):
         self.query_indices = torch.arange(0, num_queries)
         self.query_embedding = torch.nn.Embedding(num_queries, hidden_dim)
         self.transformer = transformer
-        hidden_dim = transformer.d_model
-
-        print("hidden_dim")
-        print(hidden_dim)
 
         self.class_embed = torch.nn.Linear(hidden_dim, num_classes + 1)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -49,44 +45,24 @@ class DETR(torch.nn.Module):
                                (center_x, center_y, height, width). These values are normalized in [0, 1],
                                relative to the size of each individual image (disregarding possible padding).
                                See PostProcess for information on how to retrieve the unnormalized bounding box.
-               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
-                                dictionaries containing the two above keys for each decoder layer.
         """
-        print("images.shape:")
-        print(images.shape)
-
         backbone_output = self.backbone(images)
         backbone_projection = self.backbone_projection(backbone_output).flatten(2)
 
-        print("backbone_projection.shape:")
-        print(backbone_projection.shape)
-
         positional_embedding = self.positional_embedding(self.positional_indices)
         positional_embedding = positional_embedding.repeat(images.shape[0], 1, 1).permute(0, 2, 1)
-
-        print("positional_embedding.shape:")
-        print(positional_embedding.shape)
 
         transformer_input = backbone_projection + positional_embedding
         # Transformer input is provided as [batch, sequence, feature]
         transformer_input = transformer_input.permute(0, 2, 1)
 
-        print("transformer_input.shape:")
-        print(transformer_input.shape)
-
         query_embedding = self.query_embedding(self.query_indices).repeat(images.shape[0], 1, 1)
-
-        print("query_embedding.shape:")
-        print(query_embedding.shape)
 
         transformer_output = self.transformer(src=transformer_input, tgt=query_embedding)
 
-        print("transformer_output.shape:")
-        print(transformer_output.shape)
-
-        outputs_class = self.class_embed(transformer_output)
+        outputs_class = self.class_embed(transformer_output).sigmoid()
         outputs_coord = self.bbox_embed(transformer_output).sigmoid()
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
-        if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
+
+        out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord}
+
         return out
