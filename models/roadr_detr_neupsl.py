@@ -16,7 +16,7 @@ import utils
 import data.RoadRDataset as RoadRDataset
 
 from models.detr import DETR
-from models.losses import simple_loss as loss
+from models.losses import binary_cross_entropy
 from models.matcher import HungarianMatcher
 
 
@@ -74,11 +74,18 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return self.predictions, results
 
     def internal_eval(self, data, options={}):
+        frames, train_images, labels, boxes = data
+
         if options["learn"]:
             # Compute the training loss.
-            matching = self.hungarianMatcher(self.predictions["boxes"], data)
-            print("Matching: ")
-            print(matching)
+            # For the training loss, we need to first compute the matching between the predictions and the ground truth.
+            matching = self.hungarianMatcher(self.predictions["boxes"], boxes)
+
+            # Compute the classification loss using the matching.
+            bce_loss = binary_cross_entropy(self.predictions["class_probabilities"], labels, matching)
+
+            # Compute the bounding box loss using the matching.
+
 
         return {}
 

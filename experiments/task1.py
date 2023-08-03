@@ -45,19 +45,12 @@ def main():
     # Make a prediction.
     frames, train_images, labels, boxes = train_dataset[:2]
 
-    print("frames: ", frames)
-
     predictions = model.internal_predict(train_images, {"learn": True})
 
     # print("predictions: ", predictions)
 
     # Evaluate the model.
-    print("labels:", labels)
-    print("boxes:", boxes)
-
-    print("boxes:", boxes)
-
-    model.internal_eval(boxes, {"learn": True})
+    model.internal_eval(train_dataset[:2], {"learn": True})
 
 
 if __name__ == "__main__":

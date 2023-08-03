@@ -71,4 +71,5 @@ class HungarianMatcher(nn.Module):
 
         sizes = [len(v) for v in truth_boxes]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
+        return torch.stack([torch.stack((torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))) for i, j in indices])
