@@ -6,7 +6,8 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from models.model_utils import box_cxcywh_to_xyxy, generalized_box_iou
+from models.losses import generalized_box_iou
+from models.model_utils import box_cxcywh_to_xyxy
 
 
 class HungarianMatcher(nn.Module):

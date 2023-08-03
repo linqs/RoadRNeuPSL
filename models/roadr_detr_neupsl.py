@@ -17,7 +17,7 @@ import data.RoadRDataset as RoadRDataset
 
 from models.detr import DETR
 from models.losses import binary_cross_entropy
-from models.matcher import HungarianMatcher
+from models.hungarian_matcher import HungarianMatcher
 
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
