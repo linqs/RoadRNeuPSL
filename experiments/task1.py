@@ -8,7 +8,7 @@ import logger
 import utils
 
 from data.RoadRDataset import RoadRDataset
-from models.fcos import FCOSNeuPSL
+from models.roadr_detr_neupsl import RoadRDETRNeuPSL
 
 LOGGING_LEVEL = logging.DEBUG
 SEED = 42
@@ -23,7 +23,7 @@ THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 DATA_FILE_NAME = 'road_trainval_v1.0.json'
 DATA_DIR = os.path.join(THIS_DIR, "../data")
 
-MAX_FRAMES = 1
+MAX_FRAMES = 100
 
 
 def main():
@@ -39,10 +39,18 @@ def main():
 
     # Build Model.
     # TODO(connor): Change to shell call to PSL.
-    model = FCOSNeuPSL()
+    model = RoadRDETRNeuPSL()
     model.internal_init_model(None)
-    model.internal_predict(train_dataset)
-    model.internal_fit(train_dataset, None)
+
+    # Make a prediction.
+    frames, train_images, labels, boxes = train_dataset[:2]
+    predictions = model.internal_predict(train_images, {"learn": False})
+
+    print("predictions: ", predictions)
+
+    predictions = model.internal_predict(train_images, {"learn": True})
+
+    # model.internal_fit(train_dataset, None)
 
 
 if __name__ == "__main__":

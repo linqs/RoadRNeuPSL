@@ -11,7 +11,8 @@ THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
 IMAGE_HEIGHT = 960
 IMAGE_WIDTH = 1280
-IMAGE_RESIZE = 0.5
+IMAGE_RESIZE = 0.1
+IMAGE_SIZE = (int(IMAGE_HEIGHT * IMAGE_RESIZE), int(IMAGE_WIDTH * IMAGE_RESIZE))
 IMAGE_MEAN = [0.485, 0.456, 0.406]
 IMAGE_STD = [0.229, 0.224, 0.225]
 

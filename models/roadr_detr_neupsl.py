@@ -3,6 +3,7 @@ import os
 import sys
 
 import numpy
+import torch.nn
 import torchvision
 
 import pslpython.deeppsl.model
@@ -13,21 +14,34 @@ import logger
 import utils
 
 import data.RoadRDataset as RoadRDataset
+
 from models.losses import simple_loss as loss
 from models.DETR import DETR
 
 
-"""
-DETR Model from: <https://arxiv.org/pdf/2005.12872.pdf>
-"""
-class DETRNeuPSL(pslpython.deeppsl.model.DeepModel):
+class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
+    """
+    DETR Model from: <https://arxiv.org/pdf/2005.12872.pdf>
+    """
     def __init__(self):
         super().__init__()
         self._model = None
         self._predictions = None
 
     def internal_init_model(self, application, options={}):
-        self._model = DETR()
+        backbone = torchvision.models.resnet50(weights=None)
+
+        transformer = torch.nn.Transformer(
+            d_model=512,
+            nhead=8,
+            num_encoder_layers=6,
+            num_decoder_layers=6,
+            dim_feedforward=2048,
+            dropout=0.1,
+            activation='relu',
+            norm_first=False
+        )
+        self._model = DETR(backbone, transformer)
         return {}
 
     def internal_fit(self, data, gradients, options={}):
@@ -43,10 +57,8 @@ class DETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             results['mode'] = 'inference'
             self._model.eval()
 
-        # TODO(Charles): Model prediction requires 'targets' in training mode.
-        #  This is the target bounding boxes for the image.
-        #  Targets are required because the fcos model computes a loss during prediction in the torchvision implementation.
         self._predictions = self._model(data)
+
         return self._predictions, results
 
     def internal_eval(self, data, options={}):
