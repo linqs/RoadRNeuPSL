@@ -16,7 +16,7 @@ import utils
 import data.RoadRDataset as RoadRDataset
 
 from models.losses import simple_loss as loss
-from models.DETR import DETR
+from models.detr import DETR
 
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
@@ -29,16 +29,18 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self._predictions = None
 
     def internal_init_model(self, application, options={}):
-        backbone = torchvision.models.resnet50(weights=None)
+        resnet50 = torchvision.models.resnet50(weights=None)
+        backbone = torch.nn.Sequential(*list(resnet50.children())[:-2])
 
         transformer = torch.nn.Transformer(
-            d_model=512,
+            d_model=256,
             nhead=8,
             num_encoder_layers=6,
             num_decoder_layers=6,
             dim_feedforward=2048,
             dropout=0.1,
             activation='relu',
+            batch_first=True,
             norm_first=False
         )
         self._model = DETR(backbone, transformer)

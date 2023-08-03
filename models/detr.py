@@ -1,6 +1,6 @@
 import torch
 
-from models.MLP import MLP
+from models.mlp import MLP
 
 
 class DETR(torch.nn.Module):
@@ -16,17 +16,24 @@ class DETR(torch.nn.Module):
             transformer: torch module of the transformer architecture.
             num_classes: number of object classes
             num_queries: number of object queries, ie detection slot. This is the maximal number of objects
-                         DETR can detect in a single image. For COCO, we recommend 100 queries.
+                         DETR can detect in a single image.
         """
         super().__init__()
         self.backbone = backbone
 
+        self.backbone_projection = torch.nn.Conv2d(2048, hidden_dim, kernel_size=1)
+
+        self.positional_embedding = torch.nn.Embedding(1200, hidden_dim)
+        self.positional_indices = torch.arange(0, 1200)
+
         self.num_queries = num_queries
-        self.positional_embedding = torch.nn.Embedding(1000, 1)
-        self.positional_indices = torch.arange(0, 1000)
+        self.query_indices = torch.arange(0, num_queries)
         self.query_embedding = torch.nn.Embedding(num_queries, hidden_dim)
         self.transformer = transformer
         hidden_dim = transformer.d_model
+
+        print("hidden_dim")
+        print(hidden_dim)
 
         self.class_embed = torch.nn.Linear(hidden_dim, num_classes + 1)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -49,22 +56,36 @@ class DETR(torch.nn.Module):
         print(images.shape)
 
         backbone_output = self.backbone(images)
+        backbone_projection = self.backbone_projection(backbone_output).flatten(2)
 
-        print("backbone_output.shape:")
-        print(backbone_output.shape)
+        print("backbone_projection.shape:")
+        print(backbone_projection.shape)
 
         positional_embedding = self.positional_embedding(self.positional_indices)
-        positional_embedding = positional_embedding.repeat(images.shape[0], 1, 1).flatten(1)
+        positional_embedding = positional_embedding.repeat(images.shape[0], 1, 1).permute(0, 2, 1)
 
         print("positional_embedding.shape:")
         print(positional_embedding.shape)
 
-        transformer_input = backbone_output + positional_embedding
+        transformer_input = backbone_projection + positional_embedding
+        # Transformer input is provided as [batch, sequence, feature]
+        transformer_input = transformer_input.permute(0, 2, 1)
 
-        hs = self.transformer(src=backbone_output, tgt=self.query_embed())[0]
+        print("transformer_input.shape:")
+        print(transformer_input.shape)
 
-        outputs_class = self.class_embed(hs)
-        outputs_coord = self.bbox_embed(hs).sigmoid()
+        query_embedding = self.query_embedding(self.query_indices).repeat(images.shape[0], 1, 1)
+
+        print("query_embedding.shape:")
+        print(query_embedding.shape)
+
+        transformer_output = self.transformer(src=transformer_input, tgt=query_embedding)
+
+        print("transformer_output.shape:")
+        print(transformer_output.shape)
+
+        outputs_class = self.class_embed(transformer_output)
+        outputs_coord = self.bbox_embed(transformer_output).sigmoid()
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
