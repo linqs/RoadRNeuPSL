@@ -72,7 +72,7 @@ class RoadRDataset(torch_utils.data.Dataset):
 
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
         self.images = torch.empty(size=(num_frames, 3, int(IMAGE_HEIGHT * IMAGE_RESIZE), int(IMAGE_WIDTH * IMAGE_RESIZE)), dtype=torch.float32)
-        self.labels = torch.empty(size=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES), dtype=torch.int8)
+        self.labels = torch.empty(size=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES + 1), dtype=torch.bool)
         self.boxes = torch.empty(size=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, 4), dtype=torch.float32)
 
         logging.info("Loading frames for all videos.")
@@ -96,13 +96,14 @@ class RoadRDataset(torch_utils.data.Dataset):
                 self.frames[frame_index] = [videoname, str(frame['rgb_image_id'])]
 
                 # Extract labels and box coordinate for each box in the frame.
-                frame_labels = torch.zeros(size=(MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES))
+                frame_labels = torch.zeros(size=(MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES + 1), dtype=torch.bool)
                 frame_boxes = torch.zeros(size=(MAX_BOUNDING_BOXES_PER_FRAME, 4))
                 for bounding_box_index, bounding_box in enumerate(frame['annos']):
                     frame_boxes[bounding_box_index] = torch.tensor(frame['annos'][bounding_box]['box'])
+                    frame_labels[bounding_box_index, -1] = 1  # Set the last class to 1 to indicate that there is an object box here.
                     for label_type in LABEL_TYPES:
                         for label_id in frame_labels[bounding_box_index][frame['annos'][bounding_box][label_type + '_ids']]:
-                            frame_labels[bounding_box_index][int(label_id) + LABEL_TYPE_OFFSETS[label_type]] = 1
+                            frame_labels[bounding_box_index][int(label_id) + LABEL_TYPE_OFFSETS[label_type]] = True
 
                 self.labels[frame_index] = frame_labels
                 self.boxes[frame_index] = frame_boxes

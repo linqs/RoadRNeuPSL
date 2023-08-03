@@ -15,8 +15,9 @@ import utils
 
 import data.RoadRDataset as RoadRDataset
 
-from models.losses import simple_loss as loss
 from models.detr import DETR
+from models.losses import simple_loss as loss
+from models.matcher import HungarianMatcher
 
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
@@ -25,11 +26,16 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     """
     def __init__(self):
         super().__init__()
-        self._model = None
-        self._predictions = None
+        self.model = None
+        self.hungarianMatcher = None
+        self.predictions = None
+        self.training_data = None
 
     def internal_init_model(self, application, options={}):
         resnet50 = torchvision.models.resnet50(weights=None)
+
+        # Remove the last two layers of the resnet50 model.
+        # The last layer is a fully connected layer and the second to last layer is a pooling layer.
         backbone = torch.nn.Sequential(*list(resnet50.children())[:-2])
 
         transformer = torch.nn.Transformer(
@@ -43,27 +49,37 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             batch_first=True,
             norm_first=False
         )
-        self._model = DETR(backbone, transformer)
+        self.model = DETR(backbone, transformer)
+
+        # Initialize the matcher for the loss function.
+        self.hungarianMatcher = HungarianMatcher()
+
         return {}
 
     def internal_fit(self, data, gradients, options={}):
-        loss(self._predictions, data)
+        loss(self.predictions, data)
         return {}
 
     def internal_predict(self, data, options={}):
         results = {}
         if options["learn"]:
             results['mode'] = 'learning'
-            self._model.train()
+            self.model.train()
         else:
             results['mode'] = 'inference'
-            self._model.eval()
+            self.model.eval()
 
-        self._predictions = self._model(data)
+        self.predictions = self.model(data)
 
-        return self._predictions, results
+        return self.predictions, results
 
     def internal_eval(self, data, options={}):
+        if options["learn"]:
+            # Compute the training loss.
+            matching = self.hungarianMatcher(self.predictions["boxes"], data)
+            print("Matching: ")
+            print(matching)
+
         return {}
 
     def internal_save(self, options={}):

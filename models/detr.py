@@ -61,8 +61,8 @@ class DETR(torch.nn.Module):
         transformer_output = self.transformer(src=transformer_input, tgt=query_embedding)
 
         outputs_class = self.class_embed(transformer_output).sigmoid()
-        outputs_coord = self.bbox_embed(transformer_output).sigmoid()
+        outputs_bbox = self.bbox_embed(transformer_output).sigmoid()
 
-        out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord}
+        out = {'class_probabilities': outputs_class, 'boxes': outputs_bbox}
 
         return out
