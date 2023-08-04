@@ -23,12 +23,12 @@ class Trainer:
         self.device = device
         self.out_directory = out_directory
 
-    def train(self, training_data: DataLoader, validation_data: DataLoader,
+    def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader,
               n_epochs: int = 500, compute_period: int = 5):
         """
         Train the provided model and log training performance.
-        :param training_data: The training data to use for training.
-        :param validation_data: The validation data to use for validation.
+        :param training_dataloader: The training data to use for training.
+        :param validation_dataloader: The validation data to use for validation.
         :param n_epochs: (Optional) The total number of epochs to run training.
         :param compute_period: (Optional) The number of epochs to run between each validation evaluation.
         """
@@ -46,7 +46,7 @@ class Trainer:
         for epoch in tqdm.tqdm(range(n_epochs), "Training Model", leave=True):
             epoch_start_time = time.time()
 
-            with tqdm.tqdm(training_data) as tq:
+            with tqdm.tqdm(training_dataloader) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
                 for step, batch in enumerate(tq):
                     # Transfer the batch to the GPU.
@@ -67,7 +67,7 @@ class Trainer:
                 self.scheduler.step()
 
             if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
-                validation_score = self.compute_validation_score(validation_data)
+                validation_score = self.compute_validation_score(validation_dataloader)
 
                 if best_validation_score <= validation_score:
                     best_validation_score = validation_score

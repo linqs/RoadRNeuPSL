@@ -29,7 +29,7 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 DATA_FILE_NAME = 'road_trainval_v1.0.json'
 DATA_DIR = os.path.join(THIS_DIR, "../data")
 
-MAX_FRAMES = 100
+MAX_FRAMES = 1000
 
 
 def main():
@@ -43,9 +43,9 @@ def main():
     # Load training dataset.
     logging.info("Loading training dataset.")
     dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME), max_frames=MAX_FRAMES)
-    train_dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
+    train_dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
     # TODO(Charles): Create a separate validation dataset.
-    validation_dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
+    validation_dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
 
     # Preprocess training dataset.
 

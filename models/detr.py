@@ -53,13 +53,13 @@ class DETR(torch.nn.Module):
         backbone_projection = self.backbone_projection(backbone_output).flatten(2)
 
         positional_embedding = self.positional_embedding(self.positional_indices)
-        positional_embedding = positional_embedding.repeat(images.shape[0], 1, 1).permute(0, 2, 1)
+        positional_embedding = positional_embedding.expand(images.shape[0], -1, -1).permute(0, 2, 1)
 
         transformer_input = backbone_projection + positional_embedding
         # Transformer input is provided as [batch, sequence, feature]
         transformer_input = transformer_input.permute(0, 2, 1)
 
-        query_embedding = self.query_embedding(self.query_indices).repeat(images.shape[0], 1, 1)
+        query_embedding = self.query_embedding(self.query_indices).expand(images.shape[0], -1, -1)
 
         transformer_output = self.transformer(src=transformer_input, tgt=query_embedding)
 

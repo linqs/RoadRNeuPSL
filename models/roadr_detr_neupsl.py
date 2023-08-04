@@ -32,7 +32,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_init_model(self, application, options={}):
         resnet34 = torchvision.models.resnet34(weights=None)
 
-        # Remove the last two layers of the resnet50 model.
+        # Remove the last two layers of the resnet34 model.
         # The last layer is a fully connected layer and the second to last layer is a pooling layer.
         backbone = torch.nn.Sequential(*list(resnet34.children())[:-2])
 
