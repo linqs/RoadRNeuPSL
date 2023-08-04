@@ -2,6 +2,8 @@
 
 readonly THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+
 function main() {
   trap exit SIGINT
 

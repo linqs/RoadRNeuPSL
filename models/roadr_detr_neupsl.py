@@ -47,7 +47,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             batch_first=True,
             norm_first=False
         )
-        self.model = DETR(backbone, transformer)
+        self.model = DETR(backbone, transformer).to(utils.get_torch_device())
 
         return {}
 

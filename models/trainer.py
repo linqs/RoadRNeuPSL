@@ -7,7 +7,7 @@ from models.losses import binary_cross_entropy
 from models.losses import pairwise_generalized_box_iou
 from models.hungarian_match import hungarian_match
 from torch.utils.data import DataLoader
-from typing import Tuple
+from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
@@ -16,10 +16,11 @@ from models.model_utils import save_model_state
 
 class Trainer:
     def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
-                 scheduler: torch.optim.lr_scheduler.LRScheduler, out_directory: str):
+                 scheduler: torch.optim.lr_scheduler.LRScheduler, device: torch.device, out_directory: str):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.device = device
         self.out_directory = out_directory
 
     def train(self, training_data: DataLoader, validation_data: DataLoader,
@@ -48,6 +49,9 @@ class Trainer:
             with tqdm.tqdm(training_data) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
                 for step, batch in enumerate(tq):
+                    # Transfer the batch to the GPU.
+                    batch = [b.to(self.device) for b in batch]
+
                     self.optimizer.zero_grad(set_to_none=True)
 
                     loss = self.compute_training_loss(batch)
@@ -98,7 +102,7 @@ class Trainer:
             training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:d}".format(
                 best_loss, best_validation_score, total_time, max_gpu_mem))
 
-    def compute_training_loss(self, batch: Tuple, bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
+    def compute_training_loss(self, batch: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """
         Compute the training loss for the provided batch.
         :param batch: The batch to compute the training loss for.
@@ -116,10 +120,13 @@ class Trainer:
         """
         validation_score = 0.0
         for validation_batch in validation_data:
+            # Transfer the batch to the GPU.
+            validation_batch = [b.to(self.device) for b in validation_batch]
+
             validation_score += self._compute_loss(validation_batch).item()
         return validation_score
 
-    def _compute_loss(self, data: Tuple, bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
+    def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """
         Compute the loss for the provided data.
         :param data: The batch to compute the training loss for.

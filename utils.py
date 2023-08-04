@@ -41,3 +41,12 @@ def seed_everything(seed):
 
     if torch.backends.mps.is_available():
         torch.mps.manual_seed(seed)
+
+
+def get_torch_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")

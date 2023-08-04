@@ -97,7 +97,10 @@ class RoadRDataset(Dataset):
                 if "annos" not in frame:
                     continue
 
-                self.images[frame_index] = self.transforms(torchvision.io.read_image(os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))).type(torch.float32))
+                self.images[frame_index] = self.transforms(
+                    torchvision.io.read_image(
+                        os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))
+                    ).type(torch.float32))
                 self.frames[frame_index] = [videoname, str(frame['rgb_image_id'])]
 
                 # Extract labels and box coordinate for each box in the frame.

@@ -24,11 +24,14 @@ class DETR(torch.nn.Module):
         self.backbone_projection = torch.nn.Conv2d(2048, hidden_dim, kernel_size=1)
 
         self.positional_embedding = torch.nn.Embedding(1200, hidden_dim)
-        self.positional_indices = torch.arange(0, 1200)
+        positional_indices = torch.arange(0, 1200)
+        self.register_buffer("positional_indices", positional_indices, persistent=False)
 
         self.num_queries = num_queries
-        self.query_indices = torch.arange(0, num_queries)
         self.query_embedding = torch.nn.Embedding(num_queries, hidden_dim)
+        query_indices = torch.arange(0, num_queries)
+        self.register_buffer("query_indices", query_indices, persistent=False)
+
         self.transformer = transformer
 
         self.class_embed = torch.nn.Linear(hidden_dim, num_classes + 1)

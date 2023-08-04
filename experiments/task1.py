@@ -58,7 +58,7 @@ def main():
     optimizer = torch.optim.AdamW(model.model.parameters(), lr=1e-4, weight_decay=1e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=200, gamma=0.1)
 
-    trainer = Trainer(model.model, optimizer, lr_scheduler, os.path.join(BASE_RESULTS_DIR, TASK_NAME))
+    trainer = Trainer(model.model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME))
     trainer.train(train_dataloader, validation_dataloader)
 
 
