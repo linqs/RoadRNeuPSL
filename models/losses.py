@@ -36,8 +36,6 @@ def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:
     aligned_boxes1 = torch.stack([boxes1[i, indices[i, 0, :], :] for i in range(boxes1.shape[0])]).flatten(0, 1)
     aligned_boxes2 = torch.stack([boxes2[i, indices[i, 1, :], :] for i in range(boxes2.shape[0])]).flatten(0, 1)
 
-    print("aligned_boxes2: ", aligned_boxes2)
-
     return (1 - torch.diag(generalized_box_iou(
         box_cxcywh_to_xyxy(aligned_boxes1),
         box_cxcywh_to_xyxy(aligned_boxes2))).sum() / aligned_boxes1.shape[0])

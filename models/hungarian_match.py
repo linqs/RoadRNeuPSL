@@ -48,6 +48,6 @@ def hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int=
     C = C.view(batch_size, num_queries, -1).cpu()
 
     sizes = [len(v) for v in truth_boxes]
-    indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
+    indices = [linear_sum_assignment(c[i].detach().numpy()) for i, c in enumerate(C.split(sizes, -1))]
 
     return torch.stack([torch.stack((torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))) for i, j in indices])

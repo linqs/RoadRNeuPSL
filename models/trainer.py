@@ -52,10 +52,14 @@ class Trainer:
 
                     loss = self.compute_training_loss(batch)
 
+                    print("Loss: {}".format(loss.item()))
+                    print("Backward pass")
                     loss.backward()
+                    print("Post gradient computation")
                     self.post_gradient_computation()
                     loss_value = loss.item()
 
+                    print("Gradient Step")
                     self.optimizer.step()
                     self.scheduler.step()
 
@@ -125,17 +129,25 @@ class Trainer:
         """
         frames, train_images, labels, boxes = data
 
+        # Compute the predictions for the provided batch.
+        print("Computing predictions")
         predictions = self.model(train_images)
+        print("Predictions computed")
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.
+        print("Computing matching")
         matching = hungarian_match(predictions["boxes"], boxes)
+        print("Matching computed")
 
         # Compute the classification loss using the matching.
+        print("Computing losses")
         bce_loss = binary_cross_entropy(predictions["class_probabilities"], labels, matching)
+        print("BCE loss computed")
 
         # Compute the bounding box loss using the matching.
         giou_loss = pairwise_generalized_box_iou(predictions["boxes"], boxes, matching)
+        print("GIOU loss computed")
 
         return bce_weight * bce_loss + giou_weight * giou_loss
 
