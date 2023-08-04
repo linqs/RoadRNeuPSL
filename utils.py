@@ -3,6 +3,9 @@ import os
 import random
 import torch
 
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
+
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
 TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
 TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
@@ -19,7 +22,7 @@ def check_cached_file(out_file: str):
     return os.path.exists(out_file)
 
 
-def make_run_dir(out_directory: str):
+def make_dir(out_directory: str):
     """
     Make the run output directory. If the directory exists, do nothing.
     :param out_directory: The path to the run output directory.

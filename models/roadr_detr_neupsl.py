@@ -13,11 +13,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import logger
 import utils
 
-import data.RoadRDataset as RoadRDataset
-
 from models.detr import DETR
 from models.losses import binary_cross_entropy
-from models.hungarian_matcher import HungarianMatcher
+from models.losses import pairwise_generalized_box_iou
+from models.hungarian_match import hungarian_match
 
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
@@ -27,7 +26,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
         super().__init__()
         self.model = None
-        self.hungarianMatcher = None
         self.predictions = None
         self.training_data = None
 
@@ -51,13 +49,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         )
         self.model = DETR(backbone, transformer)
 
-        # Initialize the matcher for the loss function.
-        self.hungarianMatcher = HungarianMatcher()
-
         return {}
 
     def internal_fit(self, data, gradients, options={}):
-        loss(self.predictions, data)
         return {}
 
     def internal_predict(self, data, options={}):
@@ -76,18 +70,22 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_eval(self, data, options={}):
         frames, train_images, labels, boxes = data
 
+        results = {}
         if options["learn"]:
             # Compute the training loss.
             # For the training loss, we need to first compute the matching between the predictions and the ground truth.
-            matching = self.hungarianMatcher(self.predictions["boxes"], boxes)
+            matching = hungarian_match(self.predictions["boxes"], boxes)
 
             # Compute the classification loss using the matching.
             bce_loss = binary_cross_entropy(self.predictions["class_probabilities"], labels, matching)
 
             # Compute the bounding box loss using the matching.
+            giou_loss = pairwise_generalized_box_iou(self.predictions["boxes"], boxes, matching)
 
+            results["bce_loss"] = bce_loss
+            results["giou_loss"] = giou_loss
 
-        return {}
+        return results
 
     def internal_save(self, options={}):
         return {}

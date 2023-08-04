@@ -1,8 +1,11 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 """
-Utilities for bounding box manipulation and GIoU.
+Utilities for RoadRNeuPSL models.
 """
+import os
+import re
 import torch
+
+from utils import TRAINED_MODEL_FILENAME
 
 
 def box_cxcywh_to_xyxy(x):
@@ -29,3 +32,15 @@ def box_xyxy_to_cxcywh(x):
     b = [(x0 + x1) / 2, (y0 + y1) / 2,
          (x1 - x0), (y1 - y0)]
     return torch.stack(b, dim=-1)
+
+
+def load_model_state(model: torch.nn.Module, out_directory: str):
+    model.load_state_dict(torch.load(os.path.join(out_directory, TRAINED_MODEL_FILENAME)), strict=True)
+
+
+def save_model_state(model: torch.nn.Module, out_directory: str):
+    formatted_model_state_dict = {
+        re.sub(r"^module\.", "", key).strip(): model.state_dict()[key]
+        for key in model.state_dict()
+    }
+    torch.save(formatted_model_state_dict, os.path.join(out_directory, TRAINED_MODEL_FILENAME))

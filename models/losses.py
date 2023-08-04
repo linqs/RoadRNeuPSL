@@ -1,10 +1,10 @@
 import torch
 import torchvision
 
-from models.model_utils import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
+from models.model_utils import box_cxcywh_to_xyxy
 
 
-def binary_cross_entropy(outputs, truth, indices):
+def binary_cross_entropy(outputs, truth, indices) -> torch.Tensor:
     """
     Computes the binary cross entropy loss for the given outputs and targets.
     The targets are aligned with the outputs using the given indices.
@@ -15,7 +15,6 @@ def binary_cross_entropy(outputs, truth, indices):
                 - index_j is the indices of the corresponding selected targets (in order)
     :return: the computed binary cross entropy loss
     """
-
     # Align the outputs and targets using the given indices and flatten.
     aligned_outputs = torch.stack([outputs[i, indices[i, 0, :], :] for i in range(outputs.shape[0])]).flatten(0, 1)
     aligned_truth = torch.stack([truth[i, indices[i, 1, :], :] for i in range(truth.shape[0])]).flatten(0, 1)
@@ -23,7 +22,7 @@ def binary_cross_entropy(outputs, truth, indices):
     return torch.nn.functional.binary_cross_entropy(aligned_outputs, aligned_truth)
 
 
-def pairwise_generalized_box_iou(boxes1, boxes2, indices):
+def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:
     """
     Computes the pairwise generalized box iou loss for the given outputs and targets aligned using the given indices.
     :param boxes1: The first set of boxes. tensor of shape [batch_size, num_queries, 4]
@@ -33,14 +32,19 @@ def pairwise_generalized_box_iou(boxes1, boxes2, indices):
                 - index_j is the indices of the corresponding selected targets (in order)
     :return: The computed pairwise generalized box iou loss.
     """
+    # Align the boxes using the given indices.
+    aligned_boxes1 = torch.stack([boxes1[i, indices[i, 0, :], :] for i in range(boxes1.shape[0])]).flatten(0, 1)
+    aligned_boxes2 = torch.stack([boxes2[i, indices[i, 1, :], :] for i in range(boxes2.shape[0])]).flatten(0, 1)
 
-    loss_giou = 1 - torch.diag(generalized_box_iou(
-        box_cxcywh_to_xyxy(boxes1),
-        box_cxcywh_to_xyxy(boxes2)))
+    print("aligned_boxes2: ", aligned_boxes2)
+
+    return (1 - torch.diag(generalized_box_iou(
+        box_cxcywh_to_xyxy(aligned_boxes1),
+        box_cxcywh_to_xyxy(aligned_boxes2))).sum() / aligned_boxes1.shape[0])
 
 
-# modified from torchvision to also return the union
 def box_iou(boxes1, boxes2):
+    # modified from torchvision to also return the union
     area1 = torchvision.ops.boxes.box_area(boxes1)
     area2 = torchvision.ops.boxes.box_area(boxes2)
 

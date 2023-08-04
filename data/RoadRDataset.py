@@ -3,9 +3,10 @@ import logging
 import numpy as np
 import os
 import torch
-import torch.utils as torch_utils
 import torchvision.transforms as transforms
 import torchvision.io
+
+from torch.utils.data import Dataset
 
 THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
@@ -26,7 +27,7 @@ NUM_CLASSES = 41
 MAX_BOUNDING_BOXES_PER_FRAME = 25
 
 
-class RoadRDataset(torch_utils.data.Dataset):
+class RoadRDataset(Dataset):
     def __init__(self, videos, data_path, max_frames=None):
         self.labeled_videos = videos
         self.data_path = data_path
@@ -70,6 +71,8 @@ class RoadRDataset(torch_utils.data.Dataset):
                 num_frames += 1
         logging.debug("Total frames counted in all videos: {0}".format(num_frames))
 
+        # TODO(Charles): By pre allocating the max bounding boxes per frame, we are wasting a lot of memory.
+        #  Additionally, in evaluation we will have bounding boxes that are all zeros.
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
         self.images = torch.empty(size=(num_frames, 3, int(IMAGE_HEIGHT * IMAGE_RESIZE), int(IMAGE_WIDTH * IMAGE_RESIZE)), dtype=torch.float32)
         self.labels = torch.empty(size=(num_frames, MAX_BOUNDING_BOXES_PER_FRAME, NUM_CLASSES + 1), dtype=torch.float32)
