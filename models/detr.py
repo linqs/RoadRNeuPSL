@@ -21,7 +21,7 @@ class DETR(torch.nn.Module):
         super().__init__()
         self.backbone = backbone
 
-        self.backbone_projection = torch.nn.Conv2d(2048, hidden_dim, kernel_size=1)
+        self.backbone_projection = torch.nn.Conv2d(512, hidden_dim, kernel_size=1)
 
         self.positional_embedding = torch.nn.Embedding(1200, hidden_dim)
         positional_indices = torch.arange(0, 1200)

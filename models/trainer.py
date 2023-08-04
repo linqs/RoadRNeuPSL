@@ -24,7 +24,7 @@ class Trainer:
         self.out_directory = out_directory
 
     def train(self, training_data: DataLoader, validation_data: DataLoader,
-              n_epochs: int = 500, compute_period: int = 1):
+              n_epochs: int = 500, compute_period: int = 5):
         """
         Train the provided model and log training performance.
         :param training_data: The training data to use for training.
@@ -56,21 +56,17 @@ class Trainer:
 
                     loss = self.compute_training_loss(batch)
 
-                    print("Loss: {}".format(loss.item()))
-                    print("Backward pass")
                     loss.backward()
-                    print("Post gradient computation")
                     self.post_gradient_computation()
                     loss_value = loss.item()
 
-                    print("Gradient Step")
                     self.optimizer.step()
-                    self.scheduler.step()
 
                     tq.set_postfix(loss=loss_value, validation_score=validation_score)
 
+                self.scheduler.step()
+
             if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
-                torch.cuda.empty_cache()
                 validation_score = self.compute_validation_score(validation_data)
 
                 if best_validation_score <= validation_score:
@@ -124,7 +120,7 @@ class Trainer:
             validation_batch = [b.to(self.device) for b in validation_batch]
 
             validation_score += self._compute_loss(validation_batch).item()
-        return validation_score
+        return validation_score / len(validation_data)
 
     def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """
@@ -137,24 +133,17 @@ class Trainer:
         frames, train_images, labels, boxes = data
 
         # Compute the predictions for the provided batch.
-        print("Computing predictions")
         predictions = self.model(train_images)
-        print("Predictions computed")
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.
-        print("Computing matching")
         matching = hungarian_match(predictions["boxes"], boxes)
-        print("Matching computed")
 
         # Compute the classification loss using the matching.
-        print("Computing losses")
         bce_loss = binary_cross_entropy(predictions["class_probabilities"], labels, matching)
-        print("BCE loss computed")
 
         # Compute the bounding box loss using the matching.
         giou_loss = pairwise_generalized_box_iou(predictions["boxes"], boxes, matching)
-        print("GIOU loss computed")
 
         return bce_weight * bce_loss + giou_weight * giou_loss
 

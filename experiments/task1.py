@@ -43,9 +43,9 @@ def main():
     # Load training dataset.
     logging.info("Loading training dataset.")
     dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME), max_frames=MAX_FRAMES)
-    train_dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
+    train_dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
     # TODO(Charles): Create a separate validation dataset.
-    validation_dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
+    validation_dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
 
     # Preprocess training dataset.
 
