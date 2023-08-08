@@ -30,6 +30,12 @@ def make_dir(out_directory: str):
     os.makedirs(out_directory, exist_ok=True)
 
 
+def write_psl_file(path, data):
+    with open(path, 'w') as file:
+        for row in data:
+            file.write('\t'.join([str(item) for item in row]) + "\n")
+
+
 def seed_everything(seed):
     random.seed(seed)
     np.random.seed(seed)
