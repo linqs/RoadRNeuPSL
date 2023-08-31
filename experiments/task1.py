@@ -10,7 +10,7 @@ import utils
 
 from torch.utils.data import DataLoader
 
-from data.RoadRDataset import RoadRDataset
+from data.roadr_dataset import RoadRDataset
 from models.roadr_detr_neupsl import RoadRDETRNeuPSL
 from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR

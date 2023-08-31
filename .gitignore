@@ -9,6 +9,7 @@ data/psl-data
 data/rgb-images
 data/videos
 data/instance_counts.json
+data/requirements_readable.txt
 data/road_trainval_v1.0.json
 data/verify_constraints_results.csv
 data/videos.zip

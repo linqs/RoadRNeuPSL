@@ -14,7 +14,9 @@ PSL_DATA_DIR = os.path.join(THIS_DIR, 'psl-data')
 LOGGING_LEVEL = logging.INFO
 CONFIG_FILENAME = 'config.json'
 
-NUM_CLASSES = 45
+NUM_CLASSES = 41
+BOUNDING_BOX_CLASSES = [41, 42, 43, 44]
+BOUNDING_BOXES_PER_FRAME = 25
 
 
 def generate_experiment(experiment_dir, tube_size):
@@ -22,31 +24,30 @@ def generate_experiment(experiment_dir, tube_size):
 
     entity_data_map = []
     for tube_index in range(tube_size):
-        entity_data_map.append([tube_index])
+        for bounding_box_index in range(BOUNDING_BOXES_PER_FRAME):
+            entity_data_map.append([tube_index, bounding_box_index])
+
+    bounding_box_classes = []
+    for bounding_box_class in BOUNDING_BOX_CLASSES:
+        bounding_box_classes.append([bounding_box_class])
 
     entity_targets = []
     for tube_index in range(tube_size):
-        for class_index in range(NUM_CLASSES):
-            entity_targets.append([tube_index, class_index])
-
-    next_frame = []
-    for tube_index in range(tube_size - 1):
-        next_frame.append([tube_index, tube_index + 1])
+        for bounding_box_index in range(BOUNDING_BOXES_PER_FRAME):
+            for class_index in range(NUM_CLASSES + len(BOUNDING_BOX_CLASSES)):
+                entity_targets.append([tube_index, bounding_box_index, class_index])
 
     hard_co_occurrence = []
     raw_hard_co_occurrence = utils.load_csv_file(os.path.join(THIS_DIR, 'constraints', 'hard-co-occurrence.csv'))
     raw_hard_co_occurrence = [row[1:] for row in raw_hard_co_occurrence[1:]]
-    for tube_index in range(tube_size):
-        for index_i in range(len(raw_hard_co_occurrence)):
-            for index_j in range(len(raw_hard_co_occurrence[index_i])):
-                if index_i == index_j:
-                    continue
-                hard_co_occurrence.append([tube_index, index_i, index_j, int(raw_hard_co_occurrence[index_i][index_j])])
+    for index_i in range(len(raw_hard_co_occurrence)):
+        for index_j in range(len(raw_hard_co_occurrence)):
+            hard_co_occurrence.append([index_i, index_j, int(raw_hard_co_occurrence[index_i][index_j])])
 
-    utils.write_psl_file(os.path.join(experiment_dir, 'entity_data_map.txt'), entity_data_map)
-    utils.write_psl_file(os.path.join(experiment_dir, 'entity_targets.txt'), entity_targets)
-    utils.write_psl_file(os.path.join(experiment_dir, 'next_frame.txt'), next_frame)
-    utils.write_psl_file(os.path.join(experiment_dir, 'hard_co_occurrence.txt'), hard_co_occurrence)
+    utils.write_psl_file(os.path.join(experiment_dir, 'entity-data-map.txt'), entity_data_map)
+    utils.write_psl_file(os.path.join(experiment_dir, 'bounding-box-classes.txt'), bounding_box_classes)
+    utils.write_psl_file(os.path.join(experiment_dir, 'entity-targets.txt'), entity_targets)
+    utils.write_psl_file(os.path.join(experiment_dir, 'hard-co-occurrence.txt'), hard_co_occurrence)
 
 
 def _load_args():

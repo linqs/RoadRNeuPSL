@@ -9,6 +9,7 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 DATA_FILE_NAME = "road_trainval_v1.0.json"
 OUT_FILE_NAME = "verify_constraints_results.csv"
+
 LABEL_TYPES = ["agent", "action", "loc"]
 NUM_CLASSES = 41
 
@@ -65,7 +66,6 @@ LABEL_MAPPING = {
         10: [39, "BusStop"],
         11: [40, "parking"]
     }
-
 }
 
 
