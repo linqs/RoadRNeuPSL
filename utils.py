@@ -1,3 +1,5 @@
+import csv
+
 import numpy as np
 import os
 import random
@@ -34,6 +36,12 @@ def write_psl_file(path, data):
     with open(path, 'w') as file:
         for row in data:
             file.write('\t'.join([str(item) for item in row]) + "\n")
+
+
+def load_csv_file(path, delimiter=','):
+    with open(path, 'r') as file:
+        reader = csv.reader(file, delimiter=delimiter)
+        return list(reader)
 
 
 def seed_everything(seed):
