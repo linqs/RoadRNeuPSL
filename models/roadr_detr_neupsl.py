@@ -84,18 +84,18 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_fit(self, data, gradients, options={}):
         self.optimizer.zero_grad(set_to_none=True)
 
-        results = self._compute_loss()
+        loss = self._compute_loss()
 
-        total_loss = self.bce_weight * results["bce_loss"] + self.giou_weight * results["giou_loss"]
+        total_loss = self.bce_weight * loss["bce_loss"] + self.giou_weight * loss["giou_loss"]
         total_loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
         self.optimizer.step()
 
-        results["total_loss"] = total_loss.item()
-
-        return results
+        return {"total_loss": total_loss.item(),
+                "bce_loss": loss["bce_loss"].item(),
+                "giou_loss": loss["giou_loss"].item()}
 
     def internal_predict(self, data, options={}):
         self.current_batch = next(self.train_iterator)
@@ -105,6 +105,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         predictions = torch.cat((self.predictions["class_probabilities"], self.predictions["boxes"]), dim=2)
         predictions = predictions.view(-1, predictions.shape[-1])
 
+        # TODO(Connor): Predictions dimension is (100, 46), but should be (100, 45)
         return predictions.tolist(), {}
 
     def internal_eval(self, data, options={}):
