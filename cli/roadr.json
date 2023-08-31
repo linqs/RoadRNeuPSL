@@ -2,7 +2,7 @@
   "options": {
     "runtime.db.intids": true,
     "runtime.log.level": "TRACE",
-    "runtime.learn": false,
+    "runtime.learn": true,
     "runtime.learn.method": "Energy",
     "admmreasoner.computeperiod": 100,
     "admmreasoner.epsilonabs": 1.0e-6,
@@ -15,9 +15,9 @@
   },
   "rules": [
     "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class)",
-    "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & (Class1 != Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
+    "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
 
-    "Label(FrameID, BoundingBoxID, Class+) = 1 . {Class: Agent(Class)}"
+    "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
   ],
   "predicates": {
     "Neural/3": {
@@ -38,7 +38,7 @@
       }
     },
     "Label/3": {
-      "target": {
+      "targets": {
         "learn": [
           "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ],
@@ -60,10 +60,20 @@
     "BoundingBox/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-4/bounding-box-classes.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-4/bounding-box-classes.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
+        ]
+      }
+    },
+    "Agent/1": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
         ]
       }
     }

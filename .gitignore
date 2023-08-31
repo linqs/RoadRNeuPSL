@@ -1,10 +1,25 @@
-data/__pycache__
+# System Files #
+################
+.DS_Store
+
+# IDE Metadata #
+####################
+.classpath
+.project
+.settings
+.idea/
+*.iml
+
+# Editor Temporary #
+####################
+*.swp
+
+# Python #
+##########
 __pycache__
 
-# IDE files.
-.idea
-
-# data
+# Data #
+########
 data/psl-data
 data/rgb-images
 data/videos
@@ -14,8 +29,16 @@ data/road_trainval_v1.0.json
 data/verify_constraints_results.csv
 data/videos.zip
 
-# models
+# Models #
+##########
 *.pt
 
-# results
-results
+# Experiment Output #
+#####################
+*-learned.psl
+*.jar
+out*.txt
+out*.err
+inferred-predicates/
+results/
+results.json
