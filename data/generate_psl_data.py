@@ -9,7 +9,7 @@ import logger
 import utils
 
 THIS_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
-SYMBOLIC_DATA_DIR = os.path.join(THIS_DIR, 'symbolic-data')
+PSL_DATA_DIR = os.path.join(THIS_DIR, 'psl-data')
 
 LOGGING_LEVEL = logging.INFO
 CONFIG_FILENAME = 'config.json'
@@ -19,6 +19,10 @@ NUM_CLASSES = 45
 
 def generate_experiment(experiment_dir, tube_size):
     utils.make_dir(experiment_dir)
+
+    entity_data_map = []
+    for tube_index in range(tube_size):
+        entity_data_map.append([tube_index])
 
     entity_targets = []
     for tube_index in range(tube_size):
@@ -39,9 +43,10 @@ def generate_experiment(experiment_dir, tube_size):
                     continue
                 hard_co_occurrence.append([tube_index, index_i, index_j, int(raw_hard_co_occurrence[index_i][index_j])])
 
-    utils.write_psl_file(os.path.join(experiment_dir, 'entity_targets.psl'), entity_targets)
-    utils.write_psl_file(os.path.join(experiment_dir, 'next_frame.psl'), next_frame)
-    utils.write_psl_file(os.path.join(experiment_dir, 'hard_co_occurrence.psl'), hard_co_occurrence)
+    utils.write_psl_file(os.path.join(experiment_dir, 'entity_data_map.txt'), entity_data_map)
+    utils.write_psl_file(os.path.join(experiment_dir, 'entity_targets.txt'), entity_targets)
+    utils.write_psl_file(os.path.join(experiment_dir, 'next_frame.txt'), next_frame)
+    utils.write_psl_file(os.path.join(experiment_dir, 'hard_co_occurrence.txt'), hard_co_occurrence)
 
 
 def _load_args():
@@ -63,7 +68,7 @@ def main(arguments):
     logging.debug("Arguments: %s" % (arguments,))
 
     logging.info("Generating PSL data with tube size: %d" % (arguments.tubeSize,))
-    experiment_dir = os.path.join(SYMBOLIC_DATA_DIR, "experiment::tube-size-" + str(arguments.tubeSize))
+    experiment_dir = os.path.join(PSL_DATA_DIR, "experiment::tube-size-" + str(arguments.tubeSize))
     generate_experiment(experiment_dir, arguments.tubeSize)
 
 

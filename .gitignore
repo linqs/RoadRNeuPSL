@@ -5,12 +5,13 @@ __pycache__
 .idea
 
 # data
+data/psl-data
 data/rgb-images
 data/videos
-data/videos.zip
-data/road_trainval_v1.0.json
 data/instance_counts.json
-data/symbolic-data
+data/road_trainval_v1.0.json
+data/verify_constraints_results.csv
+data/videos.zip
 
 # models
 *.pt
