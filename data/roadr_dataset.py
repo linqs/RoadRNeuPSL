@@ -18,13 +18,58 @@ IMAGE_MEAN = [0.485, 0.456, 0.406]
 IMAGE_STD = [0.229, 0.224, 0.225]
 
 LABEL_TYPES = ['agent', 'action', 'loc']
-LABEL_TYPE_OFFSETS = {
-    'agent': 0,
-    'action': 10,
-    'loc': 29
-}
 NUM_CLASSES = 41
 MAX_BOUNDING_BOXES_PER_FRAME = 25
+
+LABEL_MAPPING = {
+    "agent": {
+        0: [0, "Ped"],
+        1: [1, "Car"],
+        2: [2, "Cyc"],
+        3: [3, "Mobike"],
+        5: [4, "MedVeh"],
+        6: [5, "LarVeh"],
+        7: [6, "Bus"],
+        8: [7, "EmVeh"],
+        9: [8, "TL"],
+        10: [9, "OthTL"]
+    },
+    "action": {
+        0: [10, "Red"],
+        1: [11, "Amber"],
+        2: [12, "Green"],
+        3: [13, "MovAway"],
+        4: [14, "MovTow"],
+        5: [15, "Mov"],
+        7: [16, "Brake"],
+        8: [17, "Stop"],
+        9: [18, "IncatLft"],
+        10: [19, "IncatRht"],
+        11: [20, "HazLit"],
+        12: [21, "TurLft"],
+        13: [22, "TurRht"],
+        16: [23, "Ovtak"],
+        17: [24, "Wait2X"],
+        18: [25, "XingFmLft"],
+        19: [26, "XingFmRht"],
+        20: [27, "Xing"],
+        21: [28, "PushObj"]
+    },
+    "loc": {
+        0: [29, "VehLane"],
+        1: [30, "OutgoLane"],
+        2: [31, "OutgoCycLane"],
+        3: [32, "IncomLane"],
+        4: [33, "IncomCycLane"],
+        5: [34, "Pav"],
+        6: [35, "LftPav"],
+        7: [36, "RhtPav"],
+        8: [37, "Jun"],
+        9: [38, "xing"],
+        10: [39, "BusStop"],
+        11: [40, "parking"]
+    }
+}
 
 
 class RoadRDataset(Dataset):
@@ -111,7 +156,9 @@ class RoadRDataset(Dataset):
                     frame_labels[bounding_box_index, -1] = 1  # Set the last class to 1 to indicate that there is an object box here.
                     for label_type in LABEL_TYPES:
                         for label_id in frame_labels[bounding_box_index][frame['annos'][bounding_box][label_type + '_ids']]:
-                            frame_labels[bounding_box_index][int(label_id) + LABEL_TYPE_OFFSETS[label_type]] = True
+                            if label_id not in LABEL_MAPPING[label_type]:
+                                continue
+                            frame_labels[bounding_box_index][LABEL_MAPPING[label_type][int(label_id)][0]] = True
 
                 self.labels[frame_index] = frame_labels
                 self.boxes[frame_index] = frame_boxes

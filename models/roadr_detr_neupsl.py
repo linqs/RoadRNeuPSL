@@ -51,7 +51,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME), max_frames=MAX_FRAMES)
 
-        self.train_dataloader = DataLoader(self.dataset, batch_size=4, shuffle=False)
+        self.train_dataloader = DataLoader(self.dataset, batch_size=4, shuffle=True)
         self.train_iterator = iter(self.train_dataloader)
 
     def internal_init_model(self, application, options={}):

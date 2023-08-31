@@ -10,13 +10,13 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 DATA_FILE_NAME = "road_trainval_v1.0.json"
 OUT_FILE_NAME = "verify_constraints_results.csv"
 
-LABEL_TYPES = ["agent", "action", "loc"]
-NUM_CLASSES = 41
-
 ALL_VIDEOS = True
 LABELED_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
                   "2015-02-03-19-43-11_stereo_centre_04",
                   "2015-02-24-12-32-19_stereo_centre_04"]
+
+LABEL_TYPES = ["agent", "action", "loc"]
+NUM_CLASSES = 41
 
 LABEL_MAPPING = {
     "agent": {
