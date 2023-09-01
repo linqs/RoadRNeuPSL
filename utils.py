@@ -44,6 +44,23 @@ def load_csv_file(path, delimiter=','):
         return list(reader)
 
 
+def enumerate_hyperparameters(hyperparameters_dict, current_hyperparameters={}):
+    for key in sorted(hyperparameters_dict):
+        hyperparameters = []
+        for value in hyperparameters_dict[key]:
+            next_hyperparameters = current_hyperparameters.copy()
+            next_hyperparameters[key] = value
+
+            remaining_hyperparameters = hyperparameters_dict.copy()
+            remaining_hyperparameters.pop(key)
+
+            if remaining_hyperparameters:
+                hyperparameters = hyperparameters + enumerate_hyperparameters(remaining_hyperparameters, next_hyperparameters)
+            else:
+                hyperparameters.append(next_hyperparameters)
+        return hyperparameters
+
+
 def seed_everything(seed):
     random.seed(seed)
     np.random.seed(seed)
