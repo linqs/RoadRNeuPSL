@@ -8,7 +8,7 @@ class DETR(torch.nn.Module):
     DETR Model from: <https://arxiv.org/pdf/2005.12872.pdf>
     Code adapted from: <https://github.com/facebookresearch/detr/blob/master/models/detr.py>
     """
-    def __init__(self, backbone, transformer, hidden_dim=256, num_classes=41, num_queries=25):
+    def __init__(self, backbone, transformer, image_resize=1.0, hidden_dim=256, num_classes=41, num_queries=25):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -23,8 +23,8 @@ class DETR(torch.nn.Module):
 
         self.backbone_projection = torch.nn.Conv2d(512, hidden_dim, kernel_size=1)
 
-        self.positional_embedding = torch.nn.Embedding(1200, hidden_dim)
-        positional_indices = torch.arange(0, 1200)
+        self.positional_embedding = torch.nn.Embedding(int(1200 * image_resize**2), hidden_dim)
+        positional_indices = torch.arange(0, int(1200 * image_resize**2))
         self.register_buffer("positional_indices", positional_indices, persistent=False)
 
         self.num_queries = num_queries

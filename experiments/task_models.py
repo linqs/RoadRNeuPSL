@@ -11,7 +11,7 @@ import utils
 from models.detr import DETR
 
 
-def build_task_1_model(dropout=0.1):
+def build_task_1_model(dropout=0.1, image_resize=1.0, num_queries=20):
     resnet34 = torchvision.models.resnet34(weights=None)
 
     # Remove the last two layers of the resnet34 model.
@@ -29,4 +29,4 @@ def build_task_1_model(dropout=0.1):
         batch_first=True,
         norm_first=False
     )
-    return DETR(backbone, transformer).to(utils.get_torch_device())
+    return DETR(backbone, transformer, image_resize=image_resize, num_queries=num_queries).to(utils.get_torch_device())
