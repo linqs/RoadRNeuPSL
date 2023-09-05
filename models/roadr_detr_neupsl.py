@@ -13,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import logger
 
 from data.roadr_dataset import RoadRDataset
-from experiments import task_models
+from experiments import task1_pretrain
 from models.losses import binary_cross_entropy
 from models.losses import pairwise_generalized_box_iou
 from models.hungarian_match import hungarian_match
@@ -55,7 +55,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_init_model(self, application, options={}):
         logging.info("Initializing neural model for application: {0}".format(application))
 
-        self.model = task_models.build_task_1_model()
+        self.model = task1_pretrain.task_1_model()
 
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-4)
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=200, gamma=0.1)

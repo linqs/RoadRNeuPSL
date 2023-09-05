@@ -1,18 +1,21 @@
 import argparse
+import csv
 import logging
 import os
-import torch
 import sys
+
+import torch
+import torchvision
+
+from torch.utils.data import DataLoader
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import logger
 import utils
 
-from torch.utils.data import DataLoader
-
 from data.roadr_dataset import RoadRDataset
-from experiments.task_models import build_task_1_model
+from models.detr import DETR
 from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
 
@@ -23,9 +26,9 @@ DATA_PATH = os.path.join(THIS_DIR, "..", "data", "road_trainval_v1.0.json")
 
 TASK_NAME = "task1"
 
-LABELED_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
-                  "2015-02-03-19-43-11_stereo_centre_04",
-                  "2015-02-24-12-32-19_stereo_centre_04"]
+TRAIN_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
+                "2015-02-03-19-43-11_stereo_centre_04",
+                "2015-02-24-12-32-19_stereo_centre_04"]
 
 HYPERPARAMETERS = {
     'learning-rate': [1.0e-3, 1.0e-4, 1.0e-5],
@@ -48,13 +51,38 @@ DEFAULT_PARAMETERS = {
 }
 
 
+def task_1_model(dropout, image_resize, num_queries):
+    resnet34 = torchvision.models.resnet34(weights=None)
+
+    # Remove the last two layers of the resnet34 model.
+    # The last layer is a fully connected layer and the second to last layer is a pooling layer.
+    backbone = torch.nn.Sequential(*list(resnet34.children())[:-2])
+
+    transformer = torch.nn.Transformer(
+        d_model=256,
+        nhead=8,
+        num_encoder_layers=6,
+        num_decoder_layers=6,
+        dim_feedforward=512,
+        dropout=dropout,
+        activation='relu',
+        batch_first=True,
+        norm_first=False
+    )
+    return DETR(backbone, transformer, image_resize=image_resize, num_queries=num_queries).to(utils.get_torch_device())
+
+
 def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_string):
+    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, "training_summary.csv")):
+        logging.info("Skipping training for %s, already exists." % (parameters_string,))
+        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, "training_summary.csv"))[1][1])
+
     os.makedirs(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string), exist_ok=True)
 
     train_dataloader = DataLoader(train_dataset, batch_size=parameters['batch-size'], shuffle=True)
     validation_dataloader = DataLoader(valid_dataset, batch_size=parameters['batch-size'], shuffle=True)
 
-    model = build_task_1_model(dropout=parameters["dropout"], image_resize=arguments.image_resize)
+    model = task_1_model(parameters["dropout"], arguments.image_resize, arguments.num_queries)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
@@ -69,7 +97,7 @@ def main(arguments):
     utils.seed_everything(arguments.seed)
 
     logger.initLogging(arguments.log_level)
-    logging.info("Beginning task 1 experiment.")
+    logging.info("Beginning pre-training task 1.")
     logging.debug("Arguments: %s" % (arguments,))
     logging.info("GPU available: %s" % torch.cuda.is_available())
     logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
@@ -82,35 +110,35 @@ def main(arguments):
 
     if arguments.hyperparameter_search:
         logging.info("Loading Training Dataset")
-        train_dataset = RoadRDataset(LABELED_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.0, end_frame_percentage=0.8, max_frames=arguments.max_frames)
+        train_dataset = RoadRDataset(TRAIN_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.0, end_frame_percentage=0.8, max_frames=arguments.max_frames)
         logging.info("Loading Validation Dataset")
-        valid_dataset = RoadRDataset(LABELED_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.8, end_frame_percentage=1.0, max_frames=arguments.max_frames)
+        valid_dataset = RoadRDataset(TRAIN_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.8, end_frame_percentage=1.0, max_frames=arguments.max_frames)
 
         for index in range(len(hyperparameters)):
             hyperparameters_string = ''
             for key in sorted(hyperparameters[index].keys()):
                 hyperparameters_string = hyperparameters_string + key + ':' + str(hyperparameters[index][key]) + ' -- '
-            logging.info("\n%d \ %d -- %s" % (index, len(hyperparameters), hyperparameters_string[:-3]))
+            logging.info("\n%d \ %d -- %s" % (index, len(hyperparameters), hyperparameters_string[:-4]))
 
-            loss = run_setting(arguments, train_dataset, valid_dataset, hyperparameters[index], hyperparameters_string)
+            loss = run_setting(arguments, train_dataset, valid_dataset, hyperparameters[index], hyperparameters_string[:-4])
 
             if loss < best_loss:
                 best_loss = loss
-                best_parameter_string = hyperparameters_string[:-3]
+                best_parameter_string = hyperparameters_string[:-4]
                 parameter_setting = hyperparameters[index]
 
             logging.info("Best hyperparameter setting: %s with loss %f" % (best_parameter_string, best_loss))
 
     logging.info("Loading Training Dataset")
-    train_dataset = RoadRDataset(LABELED_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.0, end_frame_percentage=0.95, max_frames=arguments.max_frames)
+    train_dataset = RoadRDataset(TRAIN_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.0, end_frame_percentage=0.95, max_frames=arguments.max_frames)
     logging.info("Loading Validation Dataset")
-    valid_dataset = RoadRDataset(LABELED_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.95, end_frame_percentage=1.0, max_frames=arguments.max_frames)
+    valid_dataset = RoadRDataset(TRAIN_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.95, end_frame_percentage=1.0, max_frames=arguments.max_frames)
 
     run_setting(arguments, train_dataset, valid_dataset, parameter_setting, 'final')
 
 
 def _load_args():
-    parser = argparse.ArgumentParser(description='Generate Road-R PSL data.')
+    parser = argparse.ArgumentParser(description='RoadR Task 1 Pre-Training Network')
 
     parser.add_argument('--seed', dest='seed',
                         action='store', type=int, default=4,

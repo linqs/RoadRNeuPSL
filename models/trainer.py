@@ -69,7 +69,7 @@ class Trainer:
             if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
                 validation_score = self.compute_validation_score(validation_dataloader)
 
-                if best_validation_score <= validation_score:
+                if validation_score < best_validation_score:
                     best_validation_score = validation_score
                     best_loss = loss_value
                     save_model_state(self.model, self.out_directory)

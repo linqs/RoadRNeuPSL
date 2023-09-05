@@ -8,7 +8,7 @@ class DETR(torch.nn.Module):
     DETR Model from: <https://arxiv.org/pdf/2005.12872.pdf>
     Code adapted from: <https://github.com/facebookresearch/detr/blob/master/models/detr.py>
     """
-    def __init__(self, backbone, transformer, image_resize=1.0, hidden_dim=256, num_classes=41, num_queries=25):
+    def __init__(self, backbone, transformer, image_resize=1.0, hidden_dim=256, num_classes=41, num_queries=20):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
