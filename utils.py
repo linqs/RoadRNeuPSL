@@ -7,11 +7,16 @@ import torch
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
+BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
+
+TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
+TRAINED_MODEL_DIR = "trained_model"
 TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
 TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
 TRAINING_SUMMARY_FILENAME = "training_summary.csv"
+EVALUATION_SUMMARY_FILENAME = "evaluation_summary.csv"
 TEST_EVALUATION_FILENAME = "test_evaluation.csv"
 
 

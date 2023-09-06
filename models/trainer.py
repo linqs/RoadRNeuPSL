@@ -11,6 +11,7 @@ from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
+from utils import EVALUATION_SUMMARY_FILENAME
 from models.model_utils import save_model_state
 
 
@@ -97,6 +98,47 @@ class Trainer:
             training_summary_file.write("Training Loss,Validation Evaluation,Total Time(s),Max GPU memory (B)\n")
             training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:d}".format(
                 best_loss, best_validation_score, total_time, max_gpu_mem))
+
+    def evaluate(self, dataloader: DataLoader):
+        """
+        Evaluate the model on the provided data.
+        :param dataloader: The data to evaluate the model on.
+        """
+        self.model.eval()
+
+        predictions = []
+        total_loss = 0
+
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+
+        evaluation_start_time = time.time()
+
+        with tqdm.tqdm(dataloader) as tq:
+            for step, batch in enumerate(tq):
+                # Transfer the batch to the GPU.
+                batch = [b.to(self.device) for b in batch]
+
+                loss = self._compute_loss(batch).item()
+                total_loss += loss
+
+                predictions.extend(self.model(batch))
+
+                tq.set_postfix(loss=loss)
+
+        total_time = time.time() - evaluation_start_time
+
+        if torch.cuda.is_available():
+            max_gpu_mem = torch.cuda.max_memory_allocated()
+        else:
+            max_gpu_mem = -1
+
+        with open(os.path.join(self.out_directory, EVALUATION_SUMMARY_FILENAME), 'w') as training_summary_file:
+            training_summary_file.write("Average Loss,Total Time(s),Max GPU memory (B)\n")
+            training_summary_file.write("{:.5f}, {:.5f}, {:d}".format(
+                total_loss / len(dataloader), total_time, max_gpu_mem))
+
+        return predictions
 
     def compute_training_loss(self, batch: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """

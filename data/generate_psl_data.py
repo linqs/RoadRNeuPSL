@@ -3,16 +3,16 @@ import logging
 import os
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
 import utils
 
 THIS_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
-PSL_DATA_DIR = os.path.join(THIS_DIR, 'psl-data')
+PSL_DATA_DIR = os.path.join(THIS_DIR, "psl-data")
 
 LOGGING_LEVEL = logging.INFO
-CONFIG_FILENAME = 'config.json'
+CONFIG_FILENAME = "config.json"
 
 NUM_CLASSES = 41
 AGENT_CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -43,26 +43,26 @@ def generate_experiment(experiment_dir, tube_size):
                 entity_targets.append([tube_index, bounding_box_index, class_index])
 
     hard_co_occurrence = []
-    raw_hard_co_occurrence = utils.load_csv_file(os.path.join(THIS_DIR, 'constraints', 'hard-co-occurrence.csv'))
+    raw_hard_co_occurrence = utils.load_csv_file(os.path.join(THIS_DIR, "constraints", "hard-co-occurrence.csv"))
     raw_hard_co_occurrence = [row[1:] for row in raw_hard_co_occurrence[1:]]
     for index_i in range(len(raw_hard_co_occurrence)):
         for index_j in range(len(raw_hard_co_occurrence)):
             hard_co_occurrence.append([index_i, index_j, int(raw_hard_co_occurrence[index_i][index_j])])
 
-    utils.write_psl_file(os.path.join(experiment_dir, 'entity-data-map.txt'), entity_data_map)
-    utils.write_psl_file(os.path.join(experiment_dir, 'classes-agent.txt'), agent_classes)
-    utils.write_psl_file(os.path.join(experiment_dir, 'classes-bounding-box.txt'), bounding_box_classes)
-    utils.write_psl_file(os.path.join(experiment_dir, 'entity-targets.txt'), entity_targets)
-    utils.write_psl_file(os.path.join(experiment_dir, 'hard-co-occurrence.txt'), hard_co_occurrence)
+    utils.write_psl_file(os.path.join(experiment_dir, "entity-data-map.txt"), entity_data_map)
+    utils.write_psl_file(os.path.join(experiment_dir, "classes-agent.txt"), agent_classes)
+    utils.write_psl_file(os.path.join(experiment_dir, "classes-bounding-box.txt"), bounding_box_classes)
+    utils.write_psl_file(os.path.join(experiment_dir, "entity-targets.txt"), entity_targets)
+    utils.write_psl_file(os.path.join(experiment_dir, "hard-co-occurrence.txt"), hard_co_occurrence)
 
 
 def _load_args():
-    parser = argparse.ArgumentParser(description='Generate Road-R PSL data.')
+    parser = argparse.ArgumentParser(description="Generate Road-R PSL data.")
 
-    parser.add_argument('--tube-size', dest='tubeSize',
-                        action='store', type=int, default=4,
-                        help='The size of the tube used to generate the '
-                             'symbolic data.')
+    parser.add_argument("--tube-size", dest="tubeSize",
+                        action="store", type=int, default=4,
+                        help="The size of the tube used to generate the "
+                             "symbolic data.")
 
     arguments = parser.parse_args()
 
@@ -79,5 +79,5 @@ def main(arguments):
     generate_experiment(experiment_dir, arguments.tubeSize)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(_load_args())

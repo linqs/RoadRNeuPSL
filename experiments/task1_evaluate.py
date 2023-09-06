@@ -4,7 +4,7 @@ import os
 import torch
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
 import utils
@@ -12,12 +12,15 @@ import utils
 from torch.utils.data import DataLoader
 
 from data.roadr_dataset import RoadRDataset
+from experiments.task1_pretrain import TASK_NAME
 from experiments.task1_pretrain import task_1_model
+from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
+from utils import EVALUATION_SUMMARY_FILENAME
+from utils import TRAIN_VALIDATION_DATA_PATH
+from utils import TRAINED_MODEL_DIR
+from utils import TRAINED_MODEL_FILENAME
 
-THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-DATA_PATH = os.path.join(THIS_DIR, "..", "data", "road_trainval_v1.0.json")
-SAVED_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, "task1", "final", "trained_model_parameters.pt")
 
 VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
                 "2014-11-25-09-18-32_stereo_centre_04",
@@ -33,7 +36,11 @@ def main(arguments):
     logging.info("GPU available: %s" % torch.cuda.is_available())
     logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
-    dataset = RoadRDataset(VALID_VIDEOS, DATA_PATH, arguments.image_resize, arguments.num_queries, max_frames=arguments.max_frames)
+    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, EVALUATION_SUMMARY_FILENAME)):
+        logging.info("Skipping evaluation for %s, already exists." % (TRAINED_MODEL_DIR,))
+        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, EVALUATION_SUMMARY_FILENAME))[1][1])
+
+    dataset = RoadRDataset(VALID_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, max_frames=arguments.max_frames)
     dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False)
 
     logging.info("Building and loading pre-trained model.")
@@ -41,33 +48,41 @@ def main(arguments):
     model.load_state_dict(torch.load(arguments.saved_model_path))
 
     logging.info("Evaluating model.")
+    model.eval()
+    model.to(arguments.device)
+
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+    trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR))
+    trainer.evaluate(dataloader)
 
 
 
 def _load_args():
-    parser = argparse.ArgumentParser(description='Evaluating Task 1.')
+    parser = argparse.ArgumentParser(description="Evaluating Task 1.")
 
-    parser.add_argument('--seed', dest='seed',
-                        action='store', type=int, default=4,
-                        help='Seed for random number generator.')
-    parser.add_argument('--image-resize', dest='image_resize',
-                        action='store', type=float, default=1.0,
-                        help='Resize factor for all images.')
-    parser.add_argument('--num-queries', dest='num_queries',
-                        action='store', type=int, default=20,
-                        help='Number of object queries, ie detection slot, in a frame.')
-    parser.add_argument('--max-frames', dest='max_frames',
-                        action='store', type=int, default=0,
-                        help='Maximum number of frames to use from each videos. Default is 0, which uses all frames.')
-    parser.add_argument('--batch-size', dest='batch_size',
-                        action='store', type=int, default=16,
-                        help='Batch size.')
-    parser.add_argument('--log-level', dest='log_level',
-                        action='store', type=str, default='INFO',
-                        help='Logging level.', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
-    parser.add_argument('--saved-model-path', dest='saved_model_path',
-                        action='store', type=str, default=SAVED_MODEL_PATH,
-                        help='Path to model parameters to load.')
+    parser.add_argument("--seed", dest="seed",
+                        action="store", type=int, default=4,
+                        help="Seed for random number generator.")
+    parser.add_argument("--image-resize", dest="image_resize",
+                        action="store", type=float, default=1.0,
+                        help="Resize factor for all images.")
+    parser.add_argument("--num-queries", dest="num_queries",
+                        action="store", type=int, default=20,
+                        help="Number of object queries, ie detection slot, in a frame.")
+    parser.add_argument("--max-frames", dest="max_frames",
+                        action="store", type=int, default=0,
+                        help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
+    parser.add_argument("--batch-size", dest="batch_size",
+                        action="store", type=int, default=16,
+                        help="Batch size.")
+    parser.add_argument("--log-level", dest="log_level",
+                        action="store", type=str, default="INFO",
+                        help="Logging level.", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+    parser.add_argument("--saved-model-path", dest="saved_model_path",
+                        action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME),
+                        help="Path to model parameters to load.")
 
     arguments = parser.parse_args()
 
