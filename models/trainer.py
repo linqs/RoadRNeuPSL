@@ -3,16 +3,17 @@ import time
 import torch
 import tqdm
 
+from models.hungarian_match import hungarian_match
 from models.losses import binary_cross_entropy
 from models.losses import pairwise_generalized_box_iou
-from models.hungarian_match import hungarian_match
+from models.model_utils import save_model_state
 from torch.utils.data import DataLoader
 from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
 from utils import EVALUATION_SUMMARY_FILENAME
-from models.model_utils import save_model_state
+
 
 
 class Trainer:
@@ -35,8 +36,8 @@ class Trainer:
         """
         learning_convergence = ""
 
-        validation_score = -1
-        best_validation_score = -1
+        validation_score = "inf"
+        best_validation_score = "inf"
         best_loss = 0
         loss_value = 0
         total_time = 0
@@ -122,7 +123,7 @@ class Trainer:
                 loss = self._compute_loss(batch).item()
                 total_loss += loss
 
-                predictions.extend(self.model(batch))
+                predictions.extend(self.model(batch[1]))
 
                 tq.set_postfix(loss=loss)
 

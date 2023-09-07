@@ -16,7 +16,8 @@ from experiments.task1_pretrain import TASK_NAME
 from experiments.task1_pretrain import task_1_model
 from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
-from utils import EVALUATION_SUMMARY_FILENAME
+from utils import EVALUATION_METRICS_FILENAME
+from utils import EVALUATION_PREDICTION_FILENAME
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
@@ -25,6 +26,36 @@ from utils import TRAINED_MODEL_FILENAME
 VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
                 "2014-11-25-09-18-32_stereo_centre_04",
                 "2015-02-13-09-16-26_stereo_centre_02"]
+
+
+def evaluate_dataset(dataset, arguments):
+    if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME)):
+        logging.info("Skipping evaluation for %s, already exists." % (os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME),))
+        return
+
+    dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False)
+
+    logging.info("Building and loading pre-trained model.")
+    model = task_1_model(0.1, arguments.image_resize, arguments.num_queries)
+    model.load_state_dict(torch.load(arguments.saved_model_path))
+
+    logging.info("Evaluating model.")
+    trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR))
+    predictions = trainer.evaluate(dataloader)
+
+    print(predictions)
+
+
+def calculate_metrics(dataset, arguments):
+    if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME)):
+        logging.info("Skipping calculation metrics for %s, already exists." % (os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME),))
+        return
+
+    logging.info("Calculating metrics.")
+
+    logging.info("Loading Predictions: %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME))
+    # predictions = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME))
+
 
 
 def main(arguments):
@@ -36,27 +67,10 @@ def main(arguments):
     logging.info("GPU available: %s" % torch.cuda.is_available())
     logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
-    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, EVALUATION_SUMMARY_FILENAME)):
-        logging.info("Skipping evaluation for %s, already exists." % (TRAINED_MODEL_DIR,))
-        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, EVALUATION_SUMMARY_FILENAME))[1][1])
-
     dataset = RoadRDataset(VALID_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, max_frames=arguments.max_frames)
-    dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False)
 
-    logging.info("Building and loading pre-trained model.")
-    model = task_1_model(image_resize=arguments.image_resize)
-    model.load_state_dict(torch.load(arguments.saved_model_path))
-
-    logging.info("Evaluating model.")
-    model.eval()
-    model.to(arguments.device)
-
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
-
-    trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR))
-    trainer.evaluate(dataloader)
-
+    evaluate_dataset(dataset, arguments)
+    calculate_metrics(dataset, arguments)
 
 
 def _load_args():
@@ -83,6 +97,9 @@ def _load_args():
     parser.add_argument("--saved-model-path", dest="saved_model_path",
                         action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME),
                         help="Path to model parameters to load.")
+    parser.add_argument("--output-dir", dest="output_dir",
+                        action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR),
+                        help="Directory to save results to.")
 
     arguments = parser.parse_args()
 

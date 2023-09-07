@@ -1,4 +1,5 @@
 import csv
+import json
 
 import numpy as np
 import os
@@ -12,12 +13,13 @@ BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
+EVALUATION_SUMMARY_FILENAME = "evaluation_summary.csv"
+EVALUATION_PREDICTION_FILENAME = "evaluation_predictions.json"
+EVALUATION_METRICS_FILENAME = "evaluation_metrics.csv"
 TRAINED_MODEL_DIR = "trained_model"
 TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
 TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
 TRAINING_SUMMARY_FILENAME = "training_summary.csv"
-EVALUATION_SUMMARY_FILENAME = "evaluation_summary.csv"
-TEST_EVALUATION_FILENAME = "test_evaluation.csv"
 
 
 def check_cached_file(out_file: str):
@@ -47,6 +49,11 @@ def load_csv_file(path, delimiter=','):
     with open(path, 'r') as file:
         reader = csv.reader(file, delimiter=delimiter)
         return list(reader)
+
+
+def load_json_file(path):
+    with open(path, "r") as file:
+        return json.load(file)
 
 
 def enumerate_hyperparameters(hyperparameters_dict, current_hyperparameters={}):
