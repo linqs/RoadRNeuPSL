@@ -7,7 +7,7 @@ from models.hungarian_match import hungarian_match
 from models.losses import binary_cross_entropy
 from models.losses import pairwise_generalized_box_iou
 from models.model_utils import save_model_state
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
@@ -107,7 +107,9 @@ class Trainer:
         """
         self.model.eval()
 
-        predictions = []
+        all_box_predictions = []
+        all_class_predictions = []
+        all_frame_indexes = []
         total_loss = 0
 
         if torch.cuda.is_available():
@@ -120,10 +122,15 @@ class Trainer:
                 # Transfer the batch to the GPU.
                 batch = [b.to(self.device) for b in batch]
 
+                frame_indexes, images, labels, boxes = batch
+
                 loss = self._compute_loss(batch).item()
                 total_loss += loss
 
-                predictions.extend(self.model(batch[1]))
+                predictions = self.model(images)
+                all_box_predictions.extend(predictions['boxes'].cpu().tolist())
+                all_class_predictions.extend(predictions['class_probabilities'].cpu().tolist())
+                all_frame_indexes.extend(frame_indexes.cpu().tolist())
 
                 tq.set_postfix(loss=loss)
 
@@ -139,7 +146,7 @@ class Trainer:
             training_summary_file.write("{:.5f}, {:.5f}, {:d}".format(
                 total_loss / len(dataloader), total_time, max_gpu_mem))
 
-        return predictions
+        return all_frame_indexes, all_box_predictions, all_class_predictions
 
     def compute_training_loss(self, batch: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """
@@ -173,10 +180,10 @@ class Trainer:
         :param giou_weight: The weight to apply to the generalized IoU loss. Default is 2 from DETR paper.
         :return: The training loss for the provided batch.
         """
-        frames, train_images, labels, boxes = data
+        frame_ids, images, labels, boxes = data
 
         # Compute the predictions for the provided batch.
-        predictions = self.model(train_images)
+        predictions = self.model(images)
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.

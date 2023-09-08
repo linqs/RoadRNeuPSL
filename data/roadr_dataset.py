@@ -1,7 +1,8 @@
 import json
 import logging
-import numpy as np
 import os
+
+import numpy as np
 import torch
 import torchvision.transforms as transforms
 import torchvision.io
@@ -97,6 +98,7 @@ class RoadRDataset(Dataset):
             transforms.Normalize(mean=IMAGE_MEAN, std=IMAGE_STD)])
 
         self.load_data()
+        self.frame_ids_mapping = {frame_id: i for i, frame_id in enumerate(self.frame_ids.tolist())}
 
     def load_data(self):
         logging.info("Loading raw json data: {0}".format(self.data_path))
@@ -118,11 +120,11 @@ class RoadRDataset(Dataset):
 
             logging.debug("Counting valid frames for video: {0} Start frame: {1} End frame: {2}".format(videoname, start_frame, end_frame))
 
-            for frame_name in sorted(database[videoname]['frames'].keys())[start_frame:end_frame]:
+            for frame_name in sorted([int(frame_name) for frame_name in database[videoname]['frames'].keys()])[start_frame:end_frame]:
                 if self.max_frames != 0 and num_video_frames >= self.max_frames:
                     break
 
-                frame = database[videoname]['frames'][frame_name]
+                frame = database[videoname]['frames'][str(frame_name)]
 
                 if "annos" not in frame:
                     continue
@@ -132,9 +134,9 @@ class RoadRDataset(Dataset):
         logging.debug("Total frames counted in all videos: {0}".format(num_frames))
 
         # TODO(Charles): By pre allocating the max bounding boxes per frame, we are wasting a lot of memory.
-        #  Additionally, in evaluation we will have bounding boxes that are all zeros.
+        # Additionally, in evaluation we will have bounding boxes that are all zeros.
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
-        self.frame_ids = torch.arange(num_frames, dtype=torch.int64)  # (video_id, frame_id)
+        self.frame_ids = torch.arange(num_frames, dtype=torch.int64)
         self.images = torch.empty(size=(num_frames, 3, int(IMAGE_HEIGHT * self.image_resize), int(IMAGE_WIDTH * self.image_resize)), dtype=torch.float32)
         self.labels = torch.empty(size=(num_frames, self.num_queries, NUM_CLASSES + 1), dtype=torch.float32)
         self.boxes = torch.empty(size=(num_frames, self.num_queries, 4), dtype=torch.float32)
@@ -151,11 +153,11 @@ class RoadRDataset(Dataset):
             end_frame = int(len(database[videoname]['frames']) * self.end_frame_percentage)
             logging.debug("Loading valid frames for video: {0} Start frame: {1} End frame: {2}".format(videoname, start_frame, end_frame))
 
-            for frame_name in sorted(database[videoname]['frames'].keys())[start_frame:end_frame]:
+            for frame_name in sorted([int(frame_name) for frame_name in database[videoname]['frames'].keys()])[start_frame:end_frame]:
                 if self.max_frames != 0 and num_video_frames >= self.max_frames:
                     break
 
-                frame = database[videoname]['frames'][frame_name]
+                frame = database[videoname]['frames'][str(frame_name)]
 
                 if "annos" not in frame:
                     continue
@@ -164,7 +166,7 @@ class RoadRDataset(Dataset):
                     torchvision.io.read_image(
                         os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))
                     ).type(torch.float32))
-                self.frames[frame_index] = [videoname, str(frame['rgb_image_id'])]
+                self.frames[frame_index] = [videoname, "{0:05d}.jpg".format(frame['rgb_image_id'])]
 
                 # Extract labels and box coordinate for each box in the frame.
                 frame_labels = torch.zeros(size=(self.num_queries, NUM_CLASSES + 1), dtype=torch.float32)
@@ -173,8 +175,8 @@ class RoadRDataset(Dataset):
                     frame_boxes[bounding_box_index] = torch.tensor(frame['annos'][bounding_box]['box'])
                     frame_labels[bounding_box_index, -1] = 1  # Set the last class to 1 to indicate that there is an object box here.
                     for label_type in LABEL_TYPES:
-                        for label_id in frame_labels[bounding_box_index][frame['annos'][bounding_box][label_type + '_ids']]:
-                            if label_id not in LABEL_MAPPING[label_type]:
+                        for label_id in frame['annos'][bounding_box][label_type + '_ids']:
+                            if int(label_id) not in LABEL_MAPPING[label_type]:
                                 continue
                             frame_labels[bounding_box_index][LABEL_MAPPING[label_type][int(label_id)][0]] = True
 

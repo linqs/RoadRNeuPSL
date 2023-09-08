@@ -15,9 +15,12 @@ from data.roadr_dataset import RoadRDataset
 from experiments.task1_pretrain import TASK_NAME
 from experiments.task1_pretrain import task_1_model
 from models.trainer import Trainer
+from models.evaluation import filter_detections
+from models.evaluation import load_labels
 from utils import BASE_RESULTS_DIR
 from utils import EVALUATION_METRICS_FILENAME
-from utils import EVALUATION_PREDICTION_FILENAME
+from utils import EVALUATION_PREDICTION_JSON_FILENAME
+from utils import EVALUATION_PREDICTION_PKL_FILENAME
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
@@ -28,10 +31,39 @@ VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
                 "2015-02-13-09-16-26_stereo_centre_02"]
 
 
+def create_task_1_output_format(dataset, dataloader, class_predictions, box_predictions):
+    output_dict = {}
+
+    all_ids = []
+    all_class_labels = []
+    all_box_labels = []
+
+    for indexes, frames, labels, boxes in dataloader:
+        frames = [dataset.get_frame_and_video_names(index).tolist() for index in indexes]
+        all_ids.extend(frames)
+        all_class_labels.extend(labels.cpu().tolist())
+        all_box_labels.extend(boxes.cpu().tolist())
+
+    for id, class_label, box_label, class_prediction, box_prediction in zip(all_ids, all_class_labels, all_box_labels, class_predictions, box_predictions):
+        if id[0] not in output_dict:
+            output_dict[id[0]] = {}
+
+        output_dict[id[0]][id[1]] = []
+        for prediction, box in zip(class_prediction, box_prediction):
+            # if max(prediction[:-1]) > prediction[-1]:
+            if prediction[-1] < 0.16:
+                output_dict[id[0]][id[1]].append({"labels": prediction[:-1], "bbox": box})
+
+    return output_dict, all_class_labels, all_box_labels
+
+
 def evaluate_dataset(dataset, arguments):
-    if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME)):
-        logging.info("Skipping evaluation for %s, already exists." % (os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME),))
+    if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME)) and \
+            os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME)):
+        logging.info("Skipping evaluation for %s, already exists." % (arguments.output_dir,))
         return
+
+    os.makedirs(os.path.join(arguments.output_dir), exist_ok=True)
 
     dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False)
 
@@ -40,10 +72,22 @@ def evaluate_dataset(dataset, arguments):
     model.load_state_dict(torch.load(arguments.saved_model_path))
 
     logging.info("Evaluating model.")
-    trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR))
-    predictions = trainer.evaluate(dataloader)
+    trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
 
-    print(predictions)
+    frame_indexes, box_predictions, class_predictions = trainer.evaluate(dataloader)
+
+    filtered_detections = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions)[..., :-1], 0.1)
+    labels = load_labels(dataset, filtered_detections)
+
+    # mean_average_precision = mean_average_precision(filtered_detections, dataset, 0.5)
+
+    # output_dict, all_class_labels, all_box_labels = create_task_1_output_format(dataset, dataloader, class_predictions, box_predictions)
+    #
+    # logging.info("Saving pkl predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
+    # utils.write_pkl_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
+    #
+    # logging.info("Saving json predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+    # utils.write_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
 
 
 def calculate_metrics(dataset, arguments):
@@ -52,10 +96,6 @@ def calculate_metrics(dataset, arguments):
         return
 
     logging.info("Calculating metrics.")
-
-    logging.info("Loading Predictions: %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME))
-    # predictions = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_FILENAME))
-
 
 
 def main(arguments):

@@ -91,7 +91,7 @@ def load_labels(data_path):
                 labels.append([0] * NUM_CLASSES)
                 for label_type in LABEL_TYPES:
                     for label_id in frame['annos'][bounding_box][label_type + '_ids']:
-                        if label_id not in LABEL_MAPPING[label_type]:
+                        if int(label_id) not in LABEL_MAPPING[label_type]:
                             continue
                         labels[-1][LABEL_MAPPING[label_type][int(label_id)][0]] = 1
     return labels
