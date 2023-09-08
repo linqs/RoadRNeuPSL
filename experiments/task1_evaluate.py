@@ -16,7 +16,8 @@ from experiments.task1_pretrain import TASK_NAME
 from experiments.task1_pretrain import task_1_model
 from models.trainer import Trainer
 from models.evaluation import filter_detections
-from models.evaluation import load_labels
+from models.evaluation import load_ground_truth_for_detections
+from models.evaluation import mean_average_precision
 from utils import BASE_RESULTS_DIR
 from utils import EVALUATION_METRICS_FILENAME
 from utils import EVALUATION_PREDICTION_JSON_FILENAME
@@ -30,31 +31,40 @@ VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
                 "2014-11-25-09-18-32_stereo_centre_04",
                 "2015-02-13-09-16-26_stereo_centre_02"]
 
+CONFIDENCE_THRESHOLD = 0.00
 
-def create_task_1_output_format(dataset, dataloader, class_predictions, box_predictions):
+
+def create_task_1_output_format(dataset, frame_indexes, class_predictions, box_predictions):
     output_dict = {}
 
-    all_ids = []
-    all_class_labels = []
-    all_box_labels = []
+    for frame_index, class_prediction, box_prediction in zip(frame_indexes, class_predictions, box_predictions):
+        frame_id = dataset.get_frame_and_video_names(frame_index)
 
-    for indexes, frames, labels, boxes in dataloader:
-        frames = [dataset.get_frame_and_video_names(index).tolist() for index in indexes]
-        all_ids.extend(frames)
-        all_class_labels.extend(labels.cpu().tolist())
-        all_box_labels.extend(boxes.cpu().tolist())
+        if frame_id[0] not in output_dict:
+            output_dict[frame_id[0]] = {}
 
-    for id, class_label, box_label, class_prediction, box_prediction in zip(all_ids, all_class_labels, all_box_labels, class_predictions, box_predictions):
-        if id[0] not in output_dict:
-            output_dict[id[0]] = {}
-
-        output_dict[id[0]][id[1]] = []
+        output_dict[frame_id[0]][frame_id[1]] = []
         for prediction, box in zip(class_prediction, box_prediction):
-            # if max(prediction[:-1]) > prediction[-1]:
-            if prediction[-1] < 0.16:
-                output_dict[id[0]][id[1]].append({"labels": prediction[:-1], "bbox": box})
+            if prediction[-1] >= CONFIDENCE_THRESHOLD:
+                output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction, "bbox": box})
 
-    return output_dict, all_class_labels, all_box_labels
+    return output_dict
+
+
+def format_saved_predictions(predicitons, dataset):
+    frame_indexes, box_predictions, class_predictions = [], [], []
+
+    for video_index, video_predictions in predicitons.items():
+        for frame_index, frame_predictions in video_predictions.items():
+            box_predictions.append([])
+            class_predictions.append([])
+
+            frame_indexes.append(dataset.video_id_frame_id_to_frame_index[(video_index, frame_index)])
+            for box_prediction in frame_predictions:
+                box_predictions[-1].append(box_prediction["bbox"])
+                class_predictions[-1].append(box_prediction["labels"])
+
+    return frame_indexes, class_predictions, box_predictions
 
 
 def evaluate_dataset(dataset, arguments):
@@ -75,27 +85,36 @@ def evaluate_dataset(dataset, arguments):
     trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
 
     frame_indexes, box_predictions, class_predictions = trainer.evaluate(dataloader)
+    output_dict = create_task_1_output_format(dataset, frame_indexes, class_predictions, box_predictions)
 
-    filtered_detections = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions)[..., :-1], 0.1)
-    labels = load_labels(dataset, filtered_detections)
+    logging.info("Saving pkl predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
+    utils.write_pkl_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
 
-    # mean_average_precision = mean_average_precision(filtered_detections, dataset, 0.5)
-
-    # output_dict, all_class_labels, all_box_labels = create_task_1_output_format(dataset, dataloader, class_predictions, box_predictions)
-    #
-    # logging.info("Saving pkl predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
-    # utils.write_pkl_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
-    #
-    # logging.info("Saving json predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
-    # utils.write_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
+    logging.info("Saving json predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+    utils.write_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
 
 
 def calculate_metrics(dataset, arguments):
     if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME)):
         logging.info("Skipping calculation metrics for %s, already exists." % (os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME),))
+
+        results = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME))
+        logging.info("Saved mean average precision: %s" % results["mean_avg_prec"])
         return
 
+    logging.info("Loading predictions.")
+    predictions = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+    frame_indexes, class_predictions, box_predictions = format_saved_predictions(predictions, dataset)
+
     logging.info("Calculating metrics.")
+    filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions)[..., :-1], 0.5)
+    filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
+
+    mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, 0.5)
+    logging.info("Mean average precision: %s" % mean_avg_prec)
+
+    logging.info("Saving metrics to %s" % os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME))
+    utils.write_json_file(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME), {"mean_avg_prec": mean_avg_prec})
 
 
 def main(arguments):

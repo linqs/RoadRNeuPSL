@@ -93,12 +93,13 @@ class RoadRDataset(Dataset):
         self.labels = None
         self.boxes = None
 
+        self.video_id_frame_id_to_frame_index = {}
+
         self.transforms = transforms.Compose([
             transforms.Resize(size=(int(IMAGE_HEIGHT * self.image_resize), int(IMAGE_WIDTH * self.image_resize)), antialias=True),
             transforms.Normalize(mean=IMAGE_MEAN, std=IMAGE_STD)])
 
         self.load_data()
-        self.frame_ids_mapping = {frame_id: i for i, frame_id in enumerate(self.frame_ids.tolist())}
 
     def load_data(self):
         logging.info("Loading raw json data: {0}".format(self.data_path))
@@ -167,6 +168,7 @@ class RoadRDataset(Dataset):
                         os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))
                     ).type(torch.float32))
                 self.frames[frame_index] = [videoname, "{0:05d}.jpg".format(frame['rgb_image_id'])]
+                self.video_id_frame_id_to_frame_index[(videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))] = frame_index
 
                 # Extract labels and box coordinate for each box in the frame.
                 frame_labels = torch.zeros(size=(self.num_queries, NUM_CLASSES + 1), dtype=torch.float32)

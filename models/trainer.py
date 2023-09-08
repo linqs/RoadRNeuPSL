@@ -36,8 +36,8 @@ class Trainer:
         """
         learning_convergence = ""
 
-        validation_score = "inf"
-        best_validation_score = "inf"
+        validation_score = float("inf")
+        best_validation_score = float("inf")
         best_loss = 0
         loss_value = 0
         total_time = 0

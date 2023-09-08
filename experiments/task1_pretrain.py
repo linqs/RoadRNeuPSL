@@ -7,6 +7,7 @@ import torch
 import torchvision
 
 from torch.utils.data import DataLoader
+from torchvision.models import ResNet34_Weights
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -41,7 +42,7 @@ HYPERPARAMETERS = {
 DEFAULT_PARAMETERS = {
     "learning-rate": 1.0e-4,
     "weight-decay": 1.0e-5,
-    "batch-size": 6,
+    "batch-size": 32,
     "dropout": 0.1,
     "step-size": 400,
     "gamma": 0.2,
@@ -50,7 +51,7 @@ DEFAULT_PARAMETERS = {
 
 
 def task_1_model(dropout, image_resize, num_queries):
-    resnet34 = torchvision.models.resnet34(weights=None)
+    resnet34 = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
 
     # Remove the last two layers of the resnet34 model.
     # The last layer is a fully connected layer and the second to last layer is a pooling layer.
@@ -81,6 +82,9 @@ def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_
     validation_dataloader = DataLoader(valid_dataset, batch_size=parameters["batch-size"], shuffle=True)
 
     model = task_1_model(parameters["dropout"], arguments.image_resize, arguments.num_queries)
+
+    # Freeze the backbone of the model.
+    model.backbone.requires_grad_(False)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])

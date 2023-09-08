@@ -14,7 +14,7 @@ BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
-EVALUATION_SUMMARY_FILENAME = "evaluation_summary.csv"
+EVALUATION_SUMMARY_FILENAME = "evaluation_summary.json"
 EVALUATION_PREDICTION_JSON_FILENAME = "evaluation_predictions.json"
 EVALUATION_PREDICTION_PKL_FILENAME = "evaluation_predictions.pkl"
 EVALUATION_METRICS_FILENAME = "evaluation_metrics.csv"
