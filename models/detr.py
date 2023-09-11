@@ -37,6 +37,8 @@ class DETR(torch.nn.Module):
         self.class_embed = torch.nn.Linear(hidden_dim, num_classes + 1)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
 
+        self.prediction_head = torch.nn.ModuleList([self.backbone_projection, self.positional_embedding, self.query_embedding, self.transformer, self.class_embed, self.bbox_embed])
+
     def forward(self, images: torch.Tensor):
         """The forward expects:
                - images: batched images, of shape [batch_size x 3 x H x W]

@@ -166,7 +166,7 @@ class RoadRDataset(Dataset):
                 self.images[frame_index] = self.transforms(
                     torchvision.io.read_image(
                         os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))
-                    ).type(torch.float32))
+                    ).type(torch.float32) / 255.0)
                 self.frames[frame_index] = [videoname, "{0:05d}.jpg".format(frame['rgb_image_id'])]
                 self.video_id_frame_id_to_frame_index[(videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))] = frame_index
 

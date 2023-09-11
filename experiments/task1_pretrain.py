@@ -33,8 +33,8 @@ HYPERPARAMETERS = {
     "learning-rate": [1.0e-3, 1.0e-4, 1.0e-5],
     "weight-decay": [1.0e-4, 1.0e-5],
     "batch-size": [32],
-    "dropout": [0.1, 0.2],
-    "step-size": [200, 400],
+    "dropout": [0.0, 0.1],
+    "step-size": [10, 20],
     "gamma": [0.1, 0.2],
     "epochs": [100]
 }
@@ -43,9 +43,9 @@ DEFAULT_PARAMETERS = {
     "learning-rate": 1.0e-4,
     "weight-decay": 1.0e-5,
     "batch-size": 32,
-    "dropout": 0.1,
-    "step-size": 400,
-    "gamma": 0.2,
+    "dropout": 0.0,
+    "step-size": 20,
+    "gamma": 0.1,
     "epochs": 100
 }
 
@@ -86,7 +86,7 @@ def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_
     # Freeze the backbone of the model.
     model.backbone.requires_grad_(False)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
+    optimizer = torch.optim.AdamW(model.prediction_head.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
 
     trainer = Trainer(model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string))
