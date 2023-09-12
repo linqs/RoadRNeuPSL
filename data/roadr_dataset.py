@@ -96,7 +96,7 @@ class RoadRDataset(Dataset):
         self.video_id_frame_id_to_frame_index = {}
 
         self.transforms = transforms.Compose([
-            transforms.Resize(size=(int(IMAGE_HEIGHT * self.image_resize), int(IMAGE_WIDTH * self.image_resize)), antialias=True),
+            transforms.Resize(size=(self.image_height(), self.image_width()), antialias=True),
             transforms.Normalize(mean=IMAGE_MEAN, std=IMAGE_STD)])
 
         self.load_data()
@@ -138,7 +138,7 @@ class RoadRDataset(Dataset):
         # Additionally, in evaluation we will have bounding boxes that are all zeros.
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
         self.frame_ids = torch.arange(num_frames, dtype=torch.int64)
-        self.images = torch.empty(size=(num_frames, 3, int(IMAGE_HEIGHT * self.image_resize), int(IMAGE_WIDTH * self.image_resize)), dtype=torch.float32)
+        self.images = torch.empty(size=(num_frames, 3, self.image_height(), self.image_width()), dtype=torch.float32)
         self.labels = torch.empty(size=(num_frames, self.num_queries, NUM_CLASSES + 1), dtype=torch.float32)
         self.boxes = torch.empty(size=(num_frames, self.num_queries, 4), dtype=torch.float32)
 
@@ -193,6 +193,12 @@ class RoadRDataset(Dataset):
 
     def get_frame_and_video_names(self, frame_id):
         return self.frames[frame_id]
+
+    def image_height(self):
+        return int(IMAGE_HEIGHT * self.image_resize)
+
+    def image_width(self):
+        return int(IMAGE_WIDTH * self.image_resize)
 
     def __len__(self):
         return len(self.frames)

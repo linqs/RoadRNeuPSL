@@ -10,6 +10,7 @@ import torch
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
 BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
+BASE_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "rgb-images")
 
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 

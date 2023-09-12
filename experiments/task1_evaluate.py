@@ -12,12 +12,13 @@ import utils
 from torch.utils.data import DataLoader
 
 from data.roadr_dataset import RoadRDataset
-from experiments.task1_pretrain import TASK_NAME
 from experiments.task1_pretrain import task_1_model
-from models.trainer import Trainer
+from experiments.task1_pretrain import TASK_NAME
+from models.analysis import save_images_with_bounding_boxes
 from models.evaluation import filter_detections
 from models.evaluation import load_ground_truth_for_detections
 from models.evaluation import mean_average_precision
+from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
 from utils import EVALUATION_METRICS_FILENAME
 from utils import EVALUATION_PREDICTION_JSON_FILENAME
@@ -31,8 +32,8 @@ VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
                 "2014-11-25-09-18-32_stereo_centre_04",
                 "2015-02-13-09-16-26_stereo_centre_02"]
 
-CONFIDENCE_THRESHOLD = 0.00
-
+CONFIDENCE_THRESHOLD = 0.50
+IOU_THRESHOLD = 0.50
 
 def create_task_1_output_format(dataset, frame_indexes, class_predictions, box_predictions):
     output_dict = {}
@@ -46,7 +47,9 @@ def create_task_1_output_format(dataset, frame_indexes, class_predictions, box_p
         output_dict[frame_id[0]][frame_id[1]] = []
         for prediction, box in zip(class_prediction, box_prediction):
             if prediction[-1] >= CONFIDENCE_THRESHOLD:
-                output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction, "bbox": box})
+                output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
+            else:
+                output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
 
     return output_dict
 
@@ -107,10 +110,10 @@ def calculate_metrics(dataset, arguments):
     frame_indexes, class_predictions, box_predictions = format_saved_predictions(predictions, dataset)
 
     logging.info("Calculating metrics.")
-    filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions)[..., :-1], 0.5)
+    filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD)
     filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
 
-    mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, 0.5)
+    mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Saving metrics to %s" % os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME))
@@ -128,8 +131,14 @@ def main(arguments):
 
     dataset = RoadRDataset(VALID_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, max_frames=arguments.max_frames)
 
+    logging.info("Evaluating dataset.")
     evaluate_dataset(dataset, arguments)
+
+    logging.info("Calculating metrics.")
     calculate_metrics(dataset, arguments)
+
+    logging.info("Saving images with bounding boxes.")
+    save_images_with_bounding_boxes(dataset, arguments)
 
 
 def _load_args():

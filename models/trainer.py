@@ -7,7 +7,7 @@ from models.hungarian_match import hungarian_match
 from models.losses import binary_cross_entropy
 from models.losses import pairwise_generalized_box_iou
 from models.model_utils import save_model_state
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
@@ -39,7 +39,6 @@ class Trainer:
         validation_score = float("inf")
         best_validation_score = float("inf")
         best_loss = 0
-        loss_value = 0
         total_time = 0
 
         if torch.cuda.is_available():
@@ -47,6 +46,7 @@ class Trainer:
 
         for epoch in tqdm.tqdm(range(n_epochs), "Training Model", leave=True):
             epoch_start_time = time.time()
+            epoch_loss = 0
 
             with tqdm.tqdm(training_dataloader) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
@@ -60,11 +60,11 @@ class Trainer:
 
                     loss.backward()
                     self.post_gradient_computation()
-                    loss_value = loss.item()
+                    epoch_loss += loss.item()
 
                     self.optimizer.step()
 
-                    tq.set_postfix(loss=loss_value, validation_score=validation_score)
+                    tq.set_postfix(loss=epoch_loss / ((step + 1) * training_dataloader.batch_size), validation_score=validation_score)
 
                 self.scheduler.step()
 
@@ -73,14 +73,14 @@ class Trainer:
 
                 if validation_score < best_validation_score:
                     best_validation_score = validation_score
-                    best_loss = loss_value
+                    best_loss = epoch_loss / (len(training_dataloader) * training_dataloader.batch_size)
                     save_model_state(self.model, self.out_directory)
 
             epoch_time = time.time() - epoch_start_time
             total_time += epoch_time
 
             learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
-                total_time, epoch_time, loss.item(), validation_score, best_validation_score)
+                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score)
 
         if torch.cuda.is_available():
             max_gpu_mem = torch.cuda.max_memory_allocated()
@@ -170,7 +170,7 @@ class Trainer:
             validation_batch = [b.to(self.device) for b in validation_batch]
 
             validation_score += self._compute_loss(validation_batch).item()
-        return validation_score / len(validation_data)
+        return validation_score / (len(validation_data) * validation_data.batch_size)
 
     def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """

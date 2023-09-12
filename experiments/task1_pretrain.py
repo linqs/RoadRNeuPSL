@@ -30,17 +30,17 @@ TRAIN_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
                 "2015-02-24-12-32-19_stereo_centre_04"]
 
 HYPERPARAMETERS = {
-    "learning-rate": [1.0e-3, 1.0e-4, 1.0e-5],
+    "learning-rate": [1.0e-4, 1.0e-5],
     "weight-decay": [1.0e-4, 1.0e-5],
     "batch-size": [32],
     "dropout": [0.0, 0.1],
-    "step-size": [10, 20],
+    "step-size": [20, 30],
     "gamma": [0.1, 0.2],
     "epochs": [100]
 }
 
 DEFAULT_PARAMETERS = {
-    "learning-rate": 1.0e-4,
+    "learning-rate": 1.0e-5,
     "weight-decay": 1.0e-5,
     "batch-size": 32,
     "dropout": 0.0,
