@@ -6,6 +6,7 @@ import tqdm
 from models.hungarian_match import hungarian_match
 from models.losses import binary_cross_entropy
 from models.losses import pairwise_generalized_box_iou
+from models.losses import pairwise_l2_loss
 from models.model_utils import save_model_state
 from torch.utils.data import DataLoader
 from typing import Tuple, List
@@ -201,7 +202,7 @@ class Trainer:
             validation_score += self._compute_loss(validation_batch).item()
         return validation_score / (len(validation_data) * validation_data.batch_size)
 
-    def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
+    def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2, l2_weight: int = 1) -> torch.Tensor:
         """
         Compute the loss for the provided data.
         :param data: The batch to compute the training loss for.
@@ -224,7 +225,10 @@ class Trainer:
         # Compute the bounding box loss using the matching.
         giou_loss = pairwise_generalized_box_iou(self.batch_predictions["boxes"], boxes, matching)
 
-        return bce_weight * bce_loss + giou_weight * giou_loss
+        # Compute the bounding box l2 loss using the matching.
+        l2_loss = pairwise_l2_loss(self.batch_predictions["boxes"], boxes, matching)
+
+        return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss
 
     def post_gradient_computation(self):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)

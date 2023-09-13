@@ -1,4 +1,5 @@
 import torch
+import torchvision.transforms
 
 from models.mlp import MLP
 
@@ -19,6 +20,9 @@ class DETR(torch.nn.Module):
                          DETR can detect in a single image.
         """
         super().__init__()
+        self.training_transforms = torchvision.transforms.Compose([torchvision.transforms.ColorJitter(brightness=0.5, hue=0.3),
+                                                                   torchvision.transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5.0))])
+
         self.backbone = backbone
 
         self.backbone_projection = torch.nn.Conv2d(512, hidden_dim, kernel_size=1)
@@ -51,6 +55,10 @@ class DETR(torch.nn.Module):
                                relative to the size of each individual image (disregarding possible padding).
                                See PostProcess for information on how to retrieve the unnormalized bounding box.
         """
+
+        if self.training:
+            images = self.training_transforms(images)
+
         backbone_output = self.backbone(images)
         backbone_projection = self.backbone_projection(backbone_output).flatten(2)
 
