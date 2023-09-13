@@ -38,9 +38,9 @@ def load_model_state(model: torch.nn.Module, out_directory: str):
     model.load_state_dict(torch.load(os.path.join(out_directory, TRAINED_MODEL_FILENAME)), strict=True)
 
 
-def save_model_state(model: torch.nn.Module, out_directory: str):
+def save_model_state(model: torch.nn.Module, out_directory: str, filename):
     formatted_model_state_dict = {
         re.sub(r"^module\.", "", key).strip(): model.state_dict()[key]
         for key in model.state_dict()
     }
-    torch.save(formatted_model_state_dict, os.path.join(out_directory, TRAINED_MODEL_FILENAME))
+    torch.save(formatted_model_state_dict, os.path.join(out_directory, filename))

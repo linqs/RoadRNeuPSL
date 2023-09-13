@@ -31,22 +31,22 @@ TRAIN_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
 
 HYPERPARAMETERS = {
     "learning-rate": [1.0e-4, 1.0e-5],
-    "weight-decay": [1.0e-4, 1.0e-5],
+    "weight-decay": [1.0e-5],
     "batch-size": [32],
     "dropout": [0.0, 0.1],
-    "step-size": [20, 30],
-    "gamma": [0.1, 0.2],
+    "step-size": [100],
+    "gamma": [1.0],
     "epochs": [100]
 }
 
 DEFAULT_PARAMETERS = {
-    "learning-rate": 1.0e-5,
+    "learning-rate": 1.0e-4,
     "weight-decay": 1.0e-5,
     "batch-size": 32,
-    "dropout": 0.0,
-    "step-size": 20,
-    "gamma": 0.1,
-    "epochs": 100
+    "dropout": 0.1,
+    "step-size": 400,
+    "gamma": 1.0,
+    "epochs": 400
 }
 
 
@@ -112,9 +112,9 @@ def main(arguments):
 
     if arguments.hyperparameter_search:
         logging.info("Loading Training Dataset")
-        train_dataset = RoadRDataset(TRAIN_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.0, end_frame_percentage=0.8, max_frames=arguments.max_frames)
+        train_dataset = RoadRDataset(TRAIN_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.0, end_frame_percentage=0.95, max_frames=arguments.max_frames)
         logging.info("Loading Validation Dataset")
-        valid_dataset = RoadRDataset(TRAIN_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.8, end_frame_percentage=1.0, max_frames=arguments.max_frames)
+        valid_dataset = RoadRDataset(TRAIN_VIDEOS, TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, start_frame_percentage=0.95, end_frame_percentage=1.0, max_frames=arguments.max_frames)
 
         for index in range(len(hyperparameters)):
             hyperparameters_string = ""

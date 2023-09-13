@@ -11,6 +11,9 @@ from torch.utils.data import DataLoader
 from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
+from utils import TRAINED_MODEL_CHECKPOINT_FILENAME
+from utils import TRAINED_MODEL_FILENAME
+from utils import TRAINED_MODEL_FINAL_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
 from utils import EVALUATION_SUMMARY_FILENAME
 
@@ -24,9 +27,10 @@ class Trainer:
         self.scheduler = scheduler
         self.device = device
         self.out_directory = out_directory
+        self.batch_predictions = None
 
     def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader,
-              n_epochs: int = 500, compute_period: int = 5):
+              n_epochs: int = 500, compute_period: int = 10):
         """
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.
@@ -41,12 +45,21 @@ class Trainer:
         best_loss = 0
         total_time = 0
 
+        previous_epoch_boxes = None
+        previous_epoch_class_probabilities = None
+
+        epoch_box_movement = 0.0
+        epoch_class_probability_movement = 0.0
+
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
 
         for epoch in tqdm.tqdm(range(n_epochs), "Training Model", leave=True):
             epoch_start_time = time.time()
             epoch_loss = 0
+
+            current_epoch_boxes = []
+            current_epoch_class_probabilities = []
 
             with tqdm.tqdm(training_dataloader) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
@@ -58,13 +71,16 @@ class Trainer:
 
                     loss = self.compute_training_loss(batch)
 
+                    current_epoch_boxes.extend(self.batch_predictions['boxes'].cpu().tolist())
+                    current_epoch_class_probabilities.extend(self.batch_predictions['class_probabilities'].cpu().tolist())
+
                     loss.backward()
                     self.post_gradient_computation()
                     epoch_loss += loss.item()
 
                     self.optimizer.step()
 
-                    tq.set_postfix(loss=epoch_loss / ((step + 1) * training_dataloader.batch_size), validation_score=validation_score)
+                    tq.set_postfix(loss=epoch_loss / ((step + 1) * training_dataloader.batch_size), validation_score=validation_score, class_probability_movement=epoch_class_probability_movement, box_movement=epoch_box_movement)
 
                 self.scheduler.step()
 
@@ -74,13 +90,25 @@ class Trainer:
                 if validation_score < best_validation_score:
                     best_validation_score = validation_score
                     best_loss = epoch_loss / (len(training_dataloader) * training_dataloader.batch_size)
-                    save_model_state(self.model, self.out_directory)
+                    save_model_state(self.model, self.out_directory, TRAINED_MODEL_FILENAME)
+
+                save_model_state(self.model, self.out_directory, TRAINED_MODEL_CHECKPOINT_FILENAME)
+
 
             epoch_time = time.time() - epoch_start_time
             total_time += epoch_time
 
-            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
-                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score)
+            if previous_epoch_boxes is not None:
+                epoch_class_probability_movement = torch.abs(torch.Tensor(previous_epoch_class_probabilities) - torch.Tensor(current_epoch_class_probabilities)).mean().item()
+                epoch_box_movement = torch.abs(torch.Tensor(previous_epoch_boxes) - torch.Tensor(current_epoch_boxes)).mean().item()
+
+            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
+                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score, epoch_class_probability_movement, epoch_box_movement)
+
+            previous_epoch_boxes = current_epoch_boxes
+            previous_epoch_class_probabilities = current_epoch_class_probabilities
+
+        save_model_state(self.model, self.out_directory, TRAINED_MODEL_FINAL_FILENAME)
 
         if torch.cuda.is_available():
             max_gpu_mem = torch.cuda.max_memory_allocated()
@@ -90,8 +118,9 @@ class Trainer:
         with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_FILENAME), 'w') as training_convergence_file:
             training_convergence_file.write(
                 "Total Time(s), Epoch Time(s), "
-                "Training Loss, "
-                "Validation Evaluation, Best Validation Evaluation\n"
+                "Training Loss, Validation Evaluation,"
+                "Best Validation Evaluation, Class Probability Movement,"
+                "Box Movement\n"
             )
             training_convergence_file.write(learning_convergence)
 
@@ -183,17 +212,17 @@ class Trainer:
         frame_ids, images, labels, boxes = data
 
         # Compute the predictions for the provided batch.
-        predictions = self.model(images)
+        self.batch_predictions = self.model(images)
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.
-        matching = hungarian_match(predictions["boxes"], boxes)
+        matching = hungarian_match(self.batch_predictions["boxes"], boxes)
 
         # Compute the classification loss using the matching.
-        bce_loss = binary_cross_entropy(predictions["class_probabilities"], labels, matching)
+        bce_loss = binary_cross_entropy(self.batch_predictions["class_probabilities"], labels, matching)
 
         # Compute the bounding box loss using the matching.
-        giou_loss = pairwise_generalized_box_iou(predictions["boxes"], boxes, matching)
+        giou_loss = pairwise_generalized_box_iou(self.batch_predictions["boxes"], boxes, matching)
 
         return bce_weight * bce_loss + giou_weight * giou_loss
 
