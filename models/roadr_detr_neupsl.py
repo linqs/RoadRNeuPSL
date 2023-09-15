@@ -14,7 +14,7 @@ import logger
 
 from data.roadr_dataset import RoadRDataset
 from experiments import task1_pretrain
-from models.losses import binary_cross_entropy
+from models.losses import binary_cross_entropy_with_logits
 from models.losses import pairwise_generalized_box_iou
 from models.hungarian_match import hungarian_match
 
@@ -109,7 +109,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         matching = hungarian_match(self.predictions["boxes"], boxes)
 
         # Compute the classification loss using the matching.
-        results["bce_loss"] = binary_cross_entropy(self.predictions["class_probabilities"], labels, matching)
+        results["bce_loss"] = binary_cross_entropy_with_logits(self.predictions["class_probabilities"], labels, matching)
 
         # Compute the bounding box loss using the matching.
         results["giou_loss"] = pairwise_generalized_box_iou(self.predictions["boxes"], boxes, matching)

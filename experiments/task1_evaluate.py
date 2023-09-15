@@ -28,29 +28,34 @@ from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
 
 
-# VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
-#                 "2014-11-25-09-18-32_stereo_centre_04",
-#                 "2015-02-13-09-16-26_stereo_centre_02"]
+VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
+                "2014-11-25-09-18-32_stereo_centre_04",
+                "2015-02-13-09-16-26_stereo_centre_02"]
 
-VALID_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
-                "2015-02-03-19-43-11_stereo_centre_04",
-                "2015-02-24-12-32-19_stereo_centre_04"]
+# VALID_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
+#                 "2015-02-03-19-43-11_stereo_centre_04",
+#                 "2015-02-24-12-32-19_stereo_centre_04"]
 
-CONFIDENCE_THRESHOLD = 0.70
+CONFIDENCE_THRESHOLD = 0.30
 IOU_THRESHOLD = 0.50
 
 
-def create_task_1_output_format(dataset, frame_indexes, class_predictions, box_predictions):
+def sigmoid_list_of_logits(logits):
+    return torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
+
+
+def create_task_1_output_format(dataset, frame_indexes, logits, boxes):
     output_dict = {}
 
-    for frame_index, class_prediction, box_prediction in zip(frame_indexes, class_predictions, box_predictions):
+    for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
         frame_id = dataset.get_frame_and_video_names(frame_index)
 
         if frame_id[0] not in output_dict:
             output_dict[frame_id[0]] = {}
 
         output_dict[frame_id[0]][frame_id[1]] = []
-        for prediction, box in zip(class_prediction, box_prediction):
+        for logits, box in zip(frame_logits, frame_boxes):
+            prediction = sigmoid_list_of_logits(logits)
             if prediction[-1] >= CONFIDENCE_THRESHOLD:
                 output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
             else:
@@ -68,9 +73,9 @@ def format_saved_predictions(predicitons, dataset):
             class_predictions.append([])
 
             frame_indexes.append(dataset.video_id_frame_id_to_frame_index[(video_index, frame_index)])
-            for box_prediction in frame_predictions:
-                box_predictions[-1].append(box_prediction["bbox"])
-                class_predictions[-1].append(box_prediction["labels"])
+            for frame_prediction in frame_predictions:
+                box_predictions[-1].append(frame_prediction["bbox"])
+                class_predictions[-1].append(frame_prediction["labels"])
 
     return frame_indexes, class_predictions, box_predictions
 
@@ -86,14 +91,14 @@ def evaluate_dataset(dataset, arguments):
     dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False)
 
     logging.info("Building and loading pre-trained model.")
-    model = task_1_model(0.1, arguments.image_resize, arguments.num_queries)
+    model = task_1_model()
     model.load_state_dict(torch.load(arguments.saved_model_path))
 
     logging.info("Evaluating model.")
     trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
 
-    frame_indexes, box_predictions, class_predictions = trainer.evaluate(dataloader)
-    output_dict = create_task_1_output_format(dataset, frame_indexes, class_predictions, box_predictions)
+    frame_indexes, boxes, logits = trainer.evaluate(dataloader)
+    output_dict = create_task_1_output_format(dataset, frame_indexes, logits, boxes)
 
     logging.info("Saving pkl predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
     utils.write_pkl_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)

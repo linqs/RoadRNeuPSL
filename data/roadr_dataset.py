@@ -5,9 +5,10 @@ import os
 import numpy as np
 import torch
 import torchvision.transforms as transforms
-import torchvision.io
+from PIL import Image
 
 from torch.utils.data import Dataset
+from transformers import DetrImageProcessor
 
 THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
@@ -86,18 +87,16 @@ class RoadRDataset(Dataset):
         self.max_frames = max_frames
         self.start_frame_percentage = start_frame_percentage
         self.end_frame_percentage = end_frame_percentage
+        self.processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50", size={"shortest_edge": self.image_height(), "longest_edge": self.image_width()})
 
         self.frames = None
         self.frame_ids = None
-        self.images = None
+        self.pixel_values = None
+        self.pixel_mask = None
         self.labels = None
         self.boxes = None
 
         self.video_id_frame_id_to_frame_index = {}
-
-        self.transforms = transforms.Compose([
-            transforms.Resize(size=(self.image_height(), self.image_width()), antialias=True),
-            transforms.Normalize(mean=IMAGE_MEAN, std=IMAGE_STD)])
 
         self.load_data()
 
@@ -134,11 +133,11 @@ class RoadRDataset(Dataset):
                 num_video_frames += 1
         logging.debug("Total frames counted in all videos: {0}".format(num_frames))
 
-        # TODO(Charles): By pre allocating the max bounding boxes per frame, we are wasting a lot of memory.
-        # Additionally, in evaluation we will have bounding boxes that are all zeros.
         self.frames = np.empty(shape=(num_frames, 2), dtype=object)  # (video_id, frame_id)
+
         self.frame_ids = torch.arange(num_frames, dtype=torch.int64)
-        self.images = torch.empty(size=(num_frames, 3, self.image_height(), self.image_width()), dtype=torch.float32)
+        self.pixel_values = np.empty(shape=(num_frames, 3, self.image_height(), self.image_width()), dtype=np.float32)
+        self.pixel_mask = np.empty(shape=(num_frames, self.image_height(), self.image_width()), dtype=np.float32)
         self.labels = torch.empty(size=(num_frames, self.num_queries, NUM_CLASSES + 1), dtype=torch.float32)
         self.boxes = torch.empty(size=(num_frames, self.num_queries, 4), dtype=torch.float32)
 
@@ -163,12 +162,12 @@ class RoadRDataset(Dataset):
                 if "annos" not in frame:
                     continue
 
-                self.images[frame_index] = self.transforms(
-                    torchvision.io.read_image(
-                        os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))
-                    ).type(torch.float32) / 255.0)
                 self.frames[frame_index] = [videoname, "{0:05d}.jpg".format(frame['rgb_image_id'])]
                 self.video_id_frame_id_to_frame_index[(videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))] = frame_index
+
+                image = self.processor(Image.open(os.path.join(THIS_DIR, "../data/rgb-images", videoname, "{0:05d}.jpg".format(frame['rgb_image_id']))))
+                self.pixel_values[frame_index] = image['pixel_values'][0]
+                self.pixel_mask[frame_index] = image['pixel_mask'][0]
 
                 # Extract labels and box coordinate for each box in the frame.
                 frame_labels = torch.zeros(size=(self.num_queries, NUM_CLASSES + 1), dtype=torch.float32)
@@ -191,6 +190,9 @@ class RoadRDataset(Dataset):
             logging.debug("Frames loaded: {0}".format(frame_index))
         logging.info("Total frames loaded for all videos: {0}".format(frame_index))
 
+        self.pixel_values = torch.from_numpy(self.pixel_values)
+        self.pixel_mask = torch.from_numpy(self.pixel_mask)
+
     def get_frame_and_video_names(self, frame_id):
         return self.frames[frame_id]
 
@@ -212,4 +214,4 @@ class RoadRDataset(Dataset):
         return len(self.frames)
 
     def __getitem__(self, index):
-        return self.frame_ids[index], self.images[index], self.labels[index], self.boxes[index]
+        return self.frame_ids[index], self.pixel_values[index], self.pixel_mask[index], self.labels[index], self.boxes[index]

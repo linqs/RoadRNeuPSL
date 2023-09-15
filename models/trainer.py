@@ -4,7 +4,7 @@ import torch
 import tqdm
 
 from models.hungarian_match import hungarian_match
-from models.losses import binary_cross_entropy
+from models.losses import binary_cross_entropy_with_logits
 from models.losses import pairwise_generalized_box_iou
 from models.losses import pairwise_l2_loss
 from models.model_utils import save_model_state
@@ -17,7 +17,6 @@ from utils import TRAINED_MODEL_FILENAME
 from utils import TRAINED_MODEL_FINAL_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
 from utils import EVALUATION_SUMMARY_FILENAME
-
 
 
 class Trainer:
@@ -47,10 +46,10 @@ class Trainer:
         total_time = 0
 
         previous_epoch_boxes = None
-        previous_epoch_class_probabilities = None
+        previous_epoch_logits = None
 
         epoch_box_movement = 0.0
-        epoch_class_probability_movement = 0.0
+        epoch_logit_movement = 0.0
 
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
@@ -60,7 +59,7 @@ class Trainer:
             epoch_loss = 0
 
             current_epoch_boxes = []
-            current_epoch_class_probabilities = []
+            current_epoch_logits = []
 
             with tqdm.tqdm(training_dataloader) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
@@ -72,8 +71,8 @@ class Trainer:
 
                     loss = self.compute_training_loss(batch)
 
-                    current_epoch_boxes.extend(self.batch_predictions['boxes'].cpu().tolist())
-                    current_epoch_class_probabilities.extend(self.batch_predictions['class_probabilities'].cpu().tolist())
+                    current_epoch_boxes.extend(self.batch_predictions['pred_boxes'].cpu().tolist())
+                    current_epoch_logits.extend(self.batch_predictions['logits'].cpu().tolist())
 
                     loss.backward()
                     self.post_gradient_computation()
@@ -81,7 +80,7 @@ class Trainer:
 
                     self.optimizer.step()
 
-                    tq.set_postfix(loss=epoch_loss / ((step + 1) * training_dataloader.batch_size), validation_score=validation_score, class_probability_movement=epoch_class_probability_movement, box_movement=epoch_box_movement)
+                    tq.set_postfix(loss=epoch_loss / ((step + 1) * training_dataloader.batch_size), validation_score=validation_score, logit_movement=epoch_logit_movement, box_movement=epoch_box_movement)
 
                 self.scheduler.step()
 
@@ -100,14 +99,14 @@ class Trainer:
             total_time += epoch_time
 
             if previous_epoch_boxes is not None:
-                epoch_class_probability_movement = torch.abs(torch.Tensor(previous_epoch_class_probabilities) - torch.Tensor(current_epoch_class_probabilities)).mean().item()
+                epoch_logit_movement = torch.abs(torch.Tensor(previous_epoch_logits) - torch.Tensor(current_epoch_logits)).mean().item()
                 epoch_box_movement = torch.abs(torch.Tensor(previous_epoch_boxes) - torch.Tensor(current_epoch_boxes)).mean().item()
 
             learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
-                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score, epoch_class_probability_movement, epoch_box_movement)
+                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score, epoch_logit_movement, epoch_box_movement)
 
             previous_epoch_boxes = [] + current_epoch_boxes
-            previous_epoch_class_probabilities = [] + current_epoch_class_probabilities
+            previous_epoch_logits = [] + current_epoch_logits
 
         save_model_state(self.model, self.out_directory, TRAINED_MODEL_FINAL_FILENAME)
 
@@ -120,7 +119,7 @@ class Trainer:
             training_convergence_file.write(
                 "Total Time(s), Epoch Time(s), "
                 "Training Loss, Validation Evaluation,"
-                "Best Validation Evaluation, Class Probability Movement,"
+                "Best Validation Evaluation, Logit Movement,"
                 "Box Movement\n"
             )
             training_convergence_file.write(learning_convergence)
@@ -138,7 +137,7 @@ class Trainer:
         self.model.eval()
 
         all_box_predictions = []
-        all_class_predictions = []
+        all_logits = []
         all_frame_indexes = []
         total_loss = 0
 
@@ -152,15 +151,16 @@ class Trainer:
                 # Transfer the batch to the GPU.
                 batch = [b.to(self.device) for b in batch]
 
-                frame_indexes, images, labels, boxes = batch
-
                 loss = self._compute_loss(batch).item()
                 total_loss += loss
 
-                predictions = self.model(images)
-                all_box_predictions.extend(predictions['boxes'].cpu().tolist())
-                all_class_predictions.extend(predictions['class_probabilities'].cpu().tolist())
-                all_frame_indexes.extend(frame_indexes.cpu().tolist())
+                frame_ids, pixel_values, pixel_mask, labels, boxes = batch
+
+                predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+
+                all_box_predictions.extend(predictions['pred_boxes'].cpu().tolist())
+                all_logits.extend(predictions['logits'].cpu().tolist())
+                all_frame_indexes.extend(frame_ids.cpu().tolist())
 
                 tq.set_postfix(loss=loss)
 
@@ -171,12 +171,12 @@ class Trainer:
         else:
             max_gpu_mem = -1
 
-        with open(os.path.join(self.out_directory, EVALUATION_SUMMARY_FILENAME), 'w') as training_summary_file:
-            training_summary_file.write("Average Loss,Total Time(s),Max GPU memory (B)\n")
-            training_summary_file.write("{:.5f}, {:.5f}, {:d}".format(
-                total_loss / len(dataloader), total_time, max_gpu_mem))
+        with open(os.path.join(self.out_directory, EVALUATION_SUMMARY_FILENAME), 'w') as evaluation_summary_file:
+            evaluation_summary_file.write("Average Loss,Total Time(s),Max GPU memory (B)\n")
+            evaluation_summary_file.write("{:.5f}, {:.5f}, {:d}".format(
+                total_loss / (len(dataloader) * dataloader.batch_size), total_time, max_gpu_mem))
 
-        return all_frame_indexes, all_box_predictions, all_class_predictions
+        return all_frame_indexes, all_box_predictions, all_logits
 
     def compute_training_loss(self, batch: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
         """
@@ -210,23 +210,23 @@ class Trainer:
         :param giou_weight: The weight to apply to the generalized IoU loss. Default is 2 from DETR paper.
         :return: The training loss for the provided batch.
         """
-        frame_ids, images, labels, boxes = data
+        frame_ids, pixel_values, pixel_mask, labels, boxes = data
 
         # Compute the predictions for the provided batch.
-        self.batch_predictions = self.model(images)
+        self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.
-        matching = hungarian_match(self.batch_predictions["boxes"], boxes)
+        matching = hungarian_match(self.batch_predictions["pred_boxes"], boxes)
 
         # Compute the classification loss using the matching.
-        bce_loss = binary_cross_entropy(self.batch_predictions["class_probabilities"], labels, matching)
+        bce_loss = binary_cross_entropy_with_logits(self.batch_predictions["logits"], labels, matching)
 
         # Compute the bounding box loss using the matching.
-        giou_loss = pairwise_generalized_box_iou(self.batch_predictions["boxes"], boxes, matching)
+        giou_loss = pairwise_generalized_box_iou(self.batch_predictions["pred_boxes"], boxes, matching)
 
         # Compute the bounding box l2 loss using the matching.
-        l2_loss = pairwise_l2_loss(self.batch_predictions["boxes"], boxes, matching)
+        l2_loss = pairwise_l2_loss(self.batch_predictions["pred_boxes"], boxes, matching)
 
         return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss
 

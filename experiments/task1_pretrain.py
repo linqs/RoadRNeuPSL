@@ -4,10 +4,9 @@ import os
 import sys
 
 import torch
-import torchvision
 
 from torch.utils.data import DataLoader
-from torchvision.models import ResNet34_Weights
+from transformers import DetrForObjectDetection
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -15,7 +14,6 @@ import logger
 import utils
 
 from data.roadr_dataset import RoadRDataset
-from models.detr import DETR
 from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
 from utils import TRAIN_VALIDATION_DATA_PATH
@@ -33,7 +31,7 @@ TRAIN_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
 HYPERPARAMETERS = {
     "learning-rate": [1.0e-4, 1.0e-5],
     "weight-decay": [1.0e-5],
-    "batch-size": [32],
+    "batch-size": [2],
     "dropout": [0.0, 0.1],
     "step-size": [100],
     "gamma": [1.0],
@@ -43,7 +41,7 @@ HYPERPARAMETERS = {
 DEFAULT_PARAMETERS = {
     "learning-rate": 1.0e-5,
     "weight-decay": 1.0e-5,
-    "batch-size": 32,
+    "batch-size": 2,
     "dropout": 0.0,
     "step-size": 500,
     "gamma": 1.0,
@@ -51,25 +49,11 @@ DEFAULT_PARAMETERS = {
 }
 
 
-def task_1_model(dropout, image_resize, num_queries):
-    resnet34 = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
-
-    # Remove the last two layers of the resnet34 model.
-    # The last layer is a fully connected layer and the second to last layer is a pooling layer.
-    backbone = torch.nn.Sequential(*list(resnet34.children())[:-2])
-
-    transformer = torch.nn.Transformer(
-        d_model=256,
-        nhead=8,
-        num_encoder_layers=6,
-        num_decoder_layers=6,
-        dim_feedforward=512,
-        dropout=dropout,
-        activation="relu",
-        batch_first=True,
-        norm_first=False
-    )
-    return DETR(backbone, transformer, image_resize=image_resize, num_queries=num_queries).to(utils.get_torch_device())
+def task_1_model():
+    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
+                                                  revision="no_timm",
+                                                  num_labels=41,
+                                                  ignore_mismatched_sizes=True).to(utils.get_torch_device())
 
 
 def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_string):
@@ -82,16 +66,13 @@ def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_
     train_dataloader = DataLoader(train_dataset, batch_size=parameters["batch-size"], shuffle=True)
     validation_dataloader = DataLoader(valid_dataset, batch_size=parameters["batch-size"], shuffle=True)
 
-    model = task_1_model(parameters["dropout"], arguments.image_resize, arguments.num_queries)
+    model = task_1_model()
 
     if arguments.resume_from_checkpoint:
         logging.info("Loading model from checkpoint: %s" % (os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINED_MODEL_CHECKPOINT_FILENAME),))
         model.load_state_dict(torch.load(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINED_MODEL_CHECKPOINT_FILENAME)))
 
-    # Freeze the backbone of the model.
-    model.backbone.requires_grad_(False)
-
-    optimizer = torch.optim.AdamW(model.prediction_head.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
 
     trainer = Trainer(model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string))
@@ -154,7 +135,7 @@ def _load_args():
                         action="store", type=float, default=1.0,
                         help="Resize factor for all images.")
     parser.add_argument("--num-queries", dest="num_queries",
-                        action="store", type=int, default=20,
+                        action="store", type=int, default=100,
                         help="Number of object queries, ie detection slot, in a frame.")
     parser.add_argument("--max-frames", dest="max_frames",
                         action="store", type=int, default=0,

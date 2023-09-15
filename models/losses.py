@@ -4,7 +4,7 @@ import torchvision
 from models.model_utils import box_cxcywh_to_xyxy
 
 
-def binary_cross_entropy(outputs, truth, indices) -> torch.Tensor:
+def binary_cross_entropy_with_logits(outputs, truth, indices) -> torch.Tensor:
     """
     Computes the binary cross entropy loss for the given outputs and targets.
     The targets are aligned with the outputs using the given indices.
@@ -19,7 +19,7 @@ def binary_cross_entropy(outputs, truth, indices) -> torch.Tensor:
     aligned_outputs = torch.stack([outputs[i, indices[i, 0, :], :] for i in range(outputs.shape[0])]).flatten(0, 1)
     aligned_truth = torch.stack([truth[i, indices[i, 1, :], :] for i in range(truth.shape[0])]).flatten(0, 1)
 
-    return torch.nn.functional.binary_cross_entropy(aligned_outputs, aligned_truth)
+    return torch.nn.functional.binary_cross_entropy_with_logits(aligned_outputs, aligned_truth)
 
 
 def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:

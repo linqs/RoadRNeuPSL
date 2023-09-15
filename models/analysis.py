@@ -86,24 +86,23 @@ def save_images_with_bounding_boxes(dataset, arguments, max_images_saved_per_vid
                 break
 
             frame_index = dataset.video_id_frame_id_to_frame_index[(video_id, frame_id)]
+            frame_ids, pixel_values, pixel_mask, ground_truth_labels, ground_truth_boxes = dataset[frame_index]
             load_frame_path = os.path.join(BASE_RGB_IMAGES_DIR, video_id, frame_id)
 
-            ground_truth_bounding_boxes = dataset[frame_index][3]
-            prediction_bounding_boxes = torch.Tensor([prediction["bbox"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
-            ground_truth_bounding_boxes = _ratio_to_pixel_coordinates(ground_truth_bounding_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
-            prediction_bounding_boxes = _ratio_to_pixel_coordinates(prediction_bounding_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+            ground_truth_boxes = _ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
 
-            ground_truth_labels = dataset[frame_index][2]
-            prediction_labels = torch.Tensor([prediction["labels"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
-            prediction_labels = prediction_labels.gt(labels_threshold).float()
+            detected_boxes = torch.Tensor([prediction["bbox"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
+            detected_boxes = _ratio_to_pixel_coordinates(detected_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+            detected_labels = torch.Tensor([prediction["labels"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
+            detected_labels = detected_labels.gt(labels_threshold).float()
 
             save_frame_path = os.path.join(arguments.output_dir, "rgb-images", video_id, frame_id[:-4] + "_boxes.jpg")
-            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_bounding_boxes, prediction_bounding_boxes, ground_truth_labels, prediction_labels, label_mapping, write_labels=False, write_ground_truth=True, write_detected=True)
+            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=False, write_ground_truth=True, write_detected=True)
 
             save_frame_path = os.path.join(arguments.output_dir, "rgb-images", video_id, frame_id[:-4] + "_ground_truth.jpg")
-            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_bounding_boxes, prediction_bounding_boxes, ground_truth_labels, prediction_labels, label_mapping, write_labels=True, write_ground_truth=True, write_detected=False)
+            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=True, write_ground_truth=True, write_detected=False)
 
             save_frame_path = os.path.join(arguments.output_dir, "rgb-images", video_id, frame_id[:-4] + "_detected.jpg")
-            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_bounding_boxes, prediction_bounding_boxes, ground_truth_labels, prediction_labels, label_mapping, write_labels=True, write_ground_truth=False, write_detected=True)
+            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=True, write_ground_truth=False, write_detected=True)
 
             images_saved_for_video += 1

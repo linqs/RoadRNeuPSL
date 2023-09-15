@@ -57,13 +57,12 @@ def load_ground_truth_for_detections(dataset, indexes, num_classes=NUM_CLASSES):
     ground_truth = []
 
     for frame_index in indexes:
-        frame_truth_boxes = dataset[frame_index][3]
-        frame_truth_labels = dataset[frame_index][2]
+        _, _, _, frame_truth_labels, frame_truth_boxes = dataset[frame_index]
 
-        mask_frame_truth_boxes = frame_truth_boxes.sum(dim=1).gt(0)
+        mask_frame_boxes = frame_truth_boxes.sum(dim=1).gt(0)
 
-        frame_truth_boxes = frame_truth_boxes[mask_frame_truth_boxes]
-        frame_truth_labels = frame_truth_labels[mask_frame_truth_boxes]
+        frame_truth_boxes = frame_truth_boxes[mask_frame_boxes]
+        frame_truth_labels = frame_truth_labels[mask_frame_boxes]
 
         for class_index in range(num_classes):
             class_frame_truth_labels = frame_truth_labels[:, class_index]
