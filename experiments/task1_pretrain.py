@@ -20,6 +20,7 @@ from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import TRAINED_MODEL_DIR
+from utils import TRAINED_MODEL_CHECKPOINT_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
 
 
@@ -40,13 +41,13 @@ HYPERPARAMETERS = {
 }
 
 DEFAULT_PARAMETERS = {
-    "learning-rate": 1.0e-4,
+    "learning-rate": 1.0e-5,
     "weight-decay": 1.0e-5,
     "batch-size": 32,
-    "dropout": 0.1,
-    "step-size": 400,
+    "dropout": 0.0,
+    "step-size": 500,
     "gamma": 1.0,
-    "epochs": 400
+    "epochs": 500
 }
 
 
@@ -72,7 +73,7 @@ def task_1_model(dropout, image_resize, num_queries):
 
 
 def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_string):
-    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINING_SUMMARY_FILENAME)):
+    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
         logging.info("Skipping training for %s, already exists." % (parameters_string,))
         return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINING_SUMMARY_FILENAME))[1][1])
 
@@ -82,6 +83,10 @@ def run_setting(arguments, train_dataset, valid_dataset, parameters, parameters_
     validation_dataloader = DataLoader(valid_dataset, batch_size=parameters["batch-size"], shuffle=True)
 
     model = task_1_model(parameters["dropout"], arguments.image_resize, arguments.num_queries)
+
+    if arguments.resume_from_checkpoint:
+        logging.info("Loading model from checkpoint: %s" % (os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINED_MODEL_CHECKPOINT_FILENAME),))
+        model.load_state_dict(torch.load(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string, TRAINED_MODEL_CHECKPOINT_FILENAME)))
 
     # Freeze the backbone of the model.
     model.backbone.requires_grad_(False)
@@ -157,6 +162,9 @@ def _load_args():
     parser.add_argument("--hyperparameter-search", dest="hyperparameter_search",
                         action="store", type=bool, default=False,
                         help="Run hyperparameter search.")
+    parser.add_argument("--resume-from-checkpoint", dest="resume_from_checkpoint",
+                        action="store", type=bool, default=False,
+                        help="Resume training from the most recent checkpoint.")
     parser.add_argument("--log-level", dest="log_level",
                         action="store", type=str, default="INFO",
                         help="Logging level.", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])

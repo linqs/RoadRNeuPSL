@@ -200,6 +200,14 @@ class RoadRDataset(Dataset):
     def image_width(self):
         return int(IMAGE_WIDTH * self.image_resize)
 
+    def label_mapping(self):
+        reverse_label_mapping = {}
+        for label_type in LABEL_MAPPING:
+            for label_id in LABEL_MAPPING[label_type]:
+                reverse_label_mapping[LABEL_MAPPING[label_type][label_id][0]] = LABEL_MAPPING[label_type][label_id][1]
+
+        return reverse_label_mapping
+
     def __len__(self):
         return len(self.frames)
 

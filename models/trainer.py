@@ -31,7 +31,7 @@ class Trainer:
         self.batch_predictions = None
 
     def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader,
-              n_epochs: int = 500, compute_period: int = 10):
+              n_epochs: int = 500, compute_period: int = 3):
         """
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.
@@ -106,8 +106,8 @@ class Trainer:
             learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
                 total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score, epoch_class_probability_movement, epoch_box_movement)
 
-            previous_epoch_boxes = current_epoch_boxes
-            previous_epoch_class_probabilities = current_epoch_class_probabilities
+            previous_epoch_boxes = [] + current_epoch_boxes
+            previous_epoch_class_probabilities = [] + current_epoch_class_probabilities
 
         save_model_state(self.model, self.out_directory, TRAINED_MODEL_FINAL_FILENAME)
 

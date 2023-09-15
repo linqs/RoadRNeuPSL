@@ -28,16 +28,17 @@ from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
 
 
-VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
-                "2014-11-25-09-18-32_stereo_centre_04",
-                "2015-02-13-09-16-26_stereo_centre_02"]
+# VALID_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
+#                 "2014-11-25-09-18-32_stereo_centre_04",
+#                 "2015-02-13-09-16-26_stereo_centre_02"]
 
-# VALID_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
-#                 "2015-02-03-19-43-11_stereo_centre_04",
-#                 "2015-02-24-12-32-19_stereo_centre_04"]
+VALID_VIDEOS = ["2014-07-14-14-49-50_stereo_centre_01",
+                "2015-02-03-19-43-11_stereo_centre_04",
+                "2015-02-24-12-32-19_stereo_centre_04"]
 
 CONFIDENCE_THRESHOLD = 0.70
 IOU_THRESHOLD = 0.50
+
 
 def create_task_1_output_format(dataset, frame_indexes, class_predictions, box_predictions):
     output_dict = {}
@@ -161,7 +162,7 @@ def _load_args():
                         action="store", type=int, default=0,
                         help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
     parser.add_argument("--batch-size", dest="batch_size",
-                        action="store", type=int, default=16,
+                        action="store", type=int, default=2,
                         help="Batch size.")
     parser.add_argument("--log-level", dest="log_level",
                         action="store", type=str, default="INFO",
