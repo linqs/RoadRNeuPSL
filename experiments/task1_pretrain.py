@@ -43,9 +43,9 @@ DEFAULT_PARAMETERS = {
     "weight-decay": 1.0e-5,
     "batch-size": 2,
     "dropout": 0.0,
-    "step-size": 500,
-    "gamma": 1.0,
-    "epochs": 500
+    "step-size": 15,
+    "gamma": 0.5,
+    "epochs": 100
 }
 
 

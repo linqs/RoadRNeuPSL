@@ -3,17 +3,17 @@ import torch
 from torchmetrics.detection import MeanAveragePrecision
 from torchvision.ops import nms
 
-CONFIDENCE_THRESHOLD = 0.025
 NUM_CLASSES = 41
 
 
-def filter_detections(frame_indexes, box_predictions, class_predictions, iou_threshold, num_classes=NUM_CLASSES):
+def filter_detections(frame_indexes, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, num_classes=NUM_CLASSES):
     """
     Filters detections by first removing all detections with a confidence score below a threshold and then applying non-maximum suppression.
     :param frame_indexes: List of frame indexes (N, 2) for which the detections were computed.
     :param box_predictions: Tensor of shape (N, 4) containing the predicted bounding boxes.
     :param class_predictions: Tensor of shape (N, C) containing the predicted class probabilities.
     :param iou_threshold: Threshold for the IoU.
+    :param label_confidence_threshold: Threshold for the confidence score.
     :param num_classes: Number of classes in the dataset.
     """
     filtered_detections = []
@@ -27,7 +27,7 @@ def filter_detections(frame_indexes, box_predictions, class_predictions, iou_thr
         for class_index in range(num_classes):
             frame_scores = class_predictions[frame_index, :, class_index]
 
-            mask_frame_scores = frame_scores.gt(CONFIDENCE_THRESHOLD)
+            mask_frame_scores = frame_scores.gt(label_confidence_threshold)
 
             masked_frame_boxes = frame_boxes[mask_frame_scores]
             masked_frame_scores = frame_scores[mask_frame_scores]

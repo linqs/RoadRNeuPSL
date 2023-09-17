@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from typing import Tuple, List
 
 from utils import TRAINING_CONVERGENCE_FILENAME
+from utils import TRAINING_CONVERGENCE_CHECKPOINT_FILENAME
 from utils import TRAINED_MODEL_CHECKPOINT_FILENAME
 from utils import TRAINED_MODEL_FILENAME
 from utils import TRAINED_MODEL_FINAL_FILENAME
@@ -30,7 +31,7 @@ class Trainer:
         self.batch_predictions = None
 
     def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader,
-              n_epochs: int = 500, compute_period: int = 3):
+              n_epochs: int = 500, compute_period: int = 1):
         """
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.
@@ -64,7 +65,6 @@ class Trainer:
             with tqdm.tqdm(training_dataloader) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
                 for step, batch in enumerate(tq):
-                    # Transfer the batch to the GPU.
                     batch = [b.to(self.device) for b in batch]
 
                     self.optimizer.zero_grad(set_to_none=True)
@@ -92,8 +92,11 @@ class Trainer:
                     best_loss = epoch_loss / (len(training_dataloader) * training_dataloader.batch_size)
                     save_model_state(self.model, self.out_directory, TRAINED_MODEL_FILENAME)
 
-                save_model_state(self.model, self.out_directory, TRAINED_MODEL_CHECKPOINT_FILENAME)
+                with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_CHECKPOINT_FILENAME), 'w') as training_convergence_checkpoint_file:
+                    training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Training Loss, Validation Evaluation, Best Validation Evaluation, Logit Movement, Box Movement\n")
+                    training_convergence_checkpoint_file.write(learning_convergence)
 
+                save_model_state(self.model, self.out_directory, TRAINED_MODEL_CHECKPOINT_FILENAME)
 
             epoch_time = time.time() - epoch_start_time
             total_time += epoch_time
@@ -116,18 +119,12 @@ class Trainer:
             max_gpu_mem = -1
 
         with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_FILENAME), 'w') as training_convergence_file:
-            training_convergence_file.write(
-                "Total Time(s), Epoch Time(s), "
-                "Training Loss, Validation Evaluation,"
-                "Best Validation Evaluation, Logit Movement,"
-                "Box Movement\n"
-            )
+            training_convergence_file.write("Total Time(s), Epoch Time(s), Training Loss, Validation Evaluation, Best Validation Evaluation, Logit Movement, Box Movement\n")
             training_convergence_file.write(learning_convergence)
 
         with open(os.path.join(self.out_directory, TRAINING_SUMMARY_FILENAME), 'w') as training_summary_file:
             training_summary_file.write("Training Loss,Validation Evaluation,Total Time(s),Max GPU memory (B)\n")
-            training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:d}".format(
-                best_loss, best_validation_score, total_time, max_gpu_mem))
+            training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:d}".format(best_loss, best_validation_score, total_time, max_gpu_mem))
 
     def evaluate(self, dataloader: DataLoader):
         """
@@ -148,7 +145,6 @@ class Trainer:
 
         with tqdm.tqdm(dataloader) as tq:
             for step, batch in enumerate(tq):
-                # Transfer the batch to the GPU.
                 batch = [b.to(self.device) for b in batch]
 
                 loss = self._compute_loss(batch).item()
