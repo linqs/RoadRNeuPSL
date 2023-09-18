@@ -16,8 +16,9 @@ CONFIG_FILENAME = "config.json"
 
 NUM_CLASSES = 41
 AGENT_CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-BOUNDING_BOX_CLASSES = [41, 42, 43, 44]
-BOUNDING_BOXES_PER_FRAME = 25
+# TODO(Connor): Adding confidence of bounding box as a class (first element - 41)
+BOUNDING_BOX_CLASSES = [41, 42, 43, 44, 45]
+BOUNDING_BOXES_PER_FRAME = 20
 
 
 def generate_experiment(experiment_dir, tube_size):

@@ -39,11 +39,11 @@ HYPERPARAMETERS = {
 }
 
 DEFAULT_PARAMETERS = {
-    "learning-rate": 1.0e-5,
+    "learning-rate": 1.0e-6,
     "weight-decay": 1.0e-5,
     "batch-size": 2,
     "dropout": 0.0,
-    "step-size": 15,
+    "step-size": 20,
     "gamma": 0.5,
     "epochs": 100
 }

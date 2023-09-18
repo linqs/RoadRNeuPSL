@@ -2,16 +2,14 @@
   "options": {
     "runtime.db.intids": true,
     "runtime.log.level": "TRACE",
-    "runtime.learn": true,
+    "runtime.learn": false,
     "runtime.learn.method": "Energy",
+    "runtime.inference.runs": 6,
     "admmreasoner.computeperiod": 100,
-    "admmreasoner.epsilonabs": 1.0e-6,
-    "admmreasoner.epsilonrel": 1.0e-4,
+    "admmreasoner.epsilonabs": 1.0e-7,
+    "admmreasoner.epsilonrel": 1.0e-5,
     "admmreasoner.stepsize": 1.0,
-    "admmreasoner.maxiterations": 5000,
-    "gradientdescent.numsteps": 2500,
-    "gradientdescent.runfulliterations": true,
-    "gradientdescent.stepsize": 1.0e-14
+    "admmreasoner.maxiterations": 2500
   },
   "rules": [
     "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class)",
@@ -26,7 +24,7 @@
         "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
         "entity-data-map-path": "../data/psl-data/experiment::tube-size-4/entity-data-map.txt",
         "entity-argument-indexes": "0,1",
-        "class-size": 45
+        "class-size": 46
       },
       "targets": {
         "learn": [

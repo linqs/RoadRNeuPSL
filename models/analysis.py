@@ -66,21 +66,21 @@ def save_frame_with_bounding_boxes(load_path, save_path, ground_truth_boxes, det
     plt.close()
 
 
-def save_images_with_bounding_boxes(dataset, arguments, write_images_with_labels, max_saved_images, labels_confidence_threshold):
+def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_labels, max_saved_images, labels_confidence_threshold):
     """
     Saves images with bounding boxes for the given dataset.
     :param dataset: Dataset for which the images should be saved.
-    :param arguments: Arguments passed to the program.
+    :param output_dir: Directory to which the images should be saved.
     :param write_images_with_labels: Whether the images should be saved with labels.
     :param max_saved_images: Maximum number of images to save.
     :param labels_confidence_threshold: Label confidence used to output labels on images with labels.
     """
-    predictions = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+    predictions = utils.load_json_file(os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
     label_mapping = dataset.label_mapping()
 
     for video_id, video_predictions in predictions.items():
         images_saved_for_video = 0
-        os.makedirs(os.path.join(arguments.output_dir, "rgb-images", video_id), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, "rgb-images", video_id), exist_ok=True)
 
         for frame_id, frame_predictions in video_predictions.items():
             if images_saved_for_video >= max_saved_images:
@@ -97,14 +97,14 @@ def save_images_with_bounding_boxes(dataset, arguments, write_images_with_labels
             detected_labels = torch.Tensor([prediction["labels"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
             detected_labels = detected_labels.gt(labels_confidence_threshold).float()
 
-            save_frame_path = os.path.join(arguments.output_dir, "rgb-images", video_id, frame_id[:-4] + "_boxes.jpg")
+            save_frame_path = os.path.join(output_dir, "rgb-images", video_id, frame_id[:-4] + "_boxes.jpg")
             save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=False, write_ground_truth=True, write_detected=True)
 
             if write_images_with_labels:
-                save_frame_path = os.path.join(arguments.output_dir, "rgb-images", video_id, frame_id[:-4] + "_ground_truth.jpg")
+                save_frame_path = os.path.join(output_dir, "rgb-images", video_id, frame_id[:-4] + "_ground_truth.jpg")
                 save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=True, write_ground_truth=True, write_detected=False)
 
-                save_frame_path = os.path.join(arguments.output_dir, "rgb-images", video_id, frame_id[:-4] + "_detected.jpg")
+                save_frame_path = os.path.join(output_dir, "rgb-images", video_id, frame_id[:-4] + "_detected.jpg")
                 save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=True, write_ground_truth=False, write_detected=True)
 
             images_saved_for_video += 1

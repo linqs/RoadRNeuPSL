@@ -38,6 +38,7 @@ EVAL_VIDEOS = {
 }
 
 BOX_CONFIDENCE_THRESHOLD = 0.70
+# LABEL_CONFIDENCE_THRESHOLD = 0.20
 LABEL_CONFIDENCE_THRESHOLD = 0.025
 IOU_THRESHOLD = 0.50
 
@@ -50,7 +51,7 @@ def sort_by_confidence(frame_logits, frame_boxes):
     return zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
 
 
-def create_task_1_output_format(dataset, frame_indexes, logits, boxes):
+def create_task_1_output_format(dataset, frame_indexes, logits, boxes, from_logits=True):
     output_dict = {}
 
     for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
@@ -63,7 +64,11 @@ def create_task_1_output_format(dataset, frame_indexes, logits, boxes):
 
         output_dict[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, frame_boxes):
-            prediction = sigmoid_list_of_logits(logits)
+            if from_logits:
+                prediction = sigmoid_list_of_logits(logits)
+            else:
+                prediction = logits
+
             if prediction[-1] >= BOX_CONFIDENCE_THRESHOLD:
                 output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
             else:
@@ -142,9 +147,9 @@ def save_images(dataset, arguments):
     if arguments.save_images.upper() == "NONE":
         pass
     elif arguments.save_images.upper() == "BOXES":
-        save_images_with_bounding_boxes(dataset, arguments, False, arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD)
+        save_images_with_bounding_boxes(dataset, arguments.output_dir, False, arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD)
     elif arguments.save_images.upper() == "BOXES_AND_LABELS":
-        save_images_with_bounding_boxes(dataset, arguments, True, arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD)
+        save_images_with_bounding_boxes(dataset, arguments.output_dir, True, arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD)
     else:
         raise ValueError("Invalid save_images argument: %s" % arguments.save_images)
 
