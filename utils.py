@@ -8,24 +8,140 @@ import random
 import torch
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
+BASE_CLI_DIR = os.path.join(THIS_DIR, "cli")
 BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
+BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
+
 BASE_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "rgb-images")
 
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
+CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
 
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
 EVALUATION_SUMMARY_FILENAME = "evaluation_summary.json"
 EVALUATION_PREDICTION_JSON_FILENAME = "evaluation_predictions.json"
 EVALUATION_PREDICTION_PKL_FILENAME = "evaluation_predictions.pkl"
-EVALUATION_METRICS_FILENAME = "evaluation_metrics.csv"
+EVALUATION_METRICS_FILENAME = "evaluation_metrics.json"
 TRAINED_MODEL_DIR = "trained_model"
 TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
-TRAINED_MODEL_CHECKPOINT_FILENAME = "trained_model_parameters_checkpoint.pt"
-TRAINED_MODEL_FINAL_FILENAME = "trained_model_parameters_final.pt"
 TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
-TRAINING_CONVERGENCE_CHECKPOINT_FILENAME = "training_convergence_checkpoint.csv"
 TRAINING_SUMMARY_FILENAME = "training_summary.csv"
+
+SEED = 4
+
+NUM_CLASSES = 41
+NUM_QUERIES = 100
+NUM_NEUPSL_QUERIES = 20
+
+BOX_CONFIDENCE_THRESHOLD = 0.3
+IOU_THRESHOLD = 0.5
+LABEL_CONFIDENCE_THRESHOLD = 0.3
+NUM_SAVED_IMAGES = 10
+
+VIDEO_PARTITIONS = {
+    "task1": {
+        "TRAIN": ["2014-07-14-14-49-50_stereo_centre_01",
+                  "2015-02-03-19-43-11_stereo_centre_04",
+                  "2015-02-24-12-32-19_stereo_centre_04"],
+        "VALID": ["2014-06-26-09-53-12_stereo_centre_02",
+                  "2014-11-25-09-18-32_stereo_centre_04",
+                  "2015-02-13-09-16-26_stereo_centre_02"]
+    }
+}
+
+LABEL_MAPPING = {
+    0: "Ped",
+    1: "Car",
+    2: "Cyc",
+    3: "Mobike",
+    4: "MedVeh",
+    5: "LarVeh",
+    6: "Bus",
+    7: "EmVeh",
+    8: "TL",
+    9: "OthTL",
+    10: "Red",
+    11: "Amber",
+    12: "Green",
+    13: "MovAway",
+    14: "MovTow",
+    15: "Mov",
+    16: "Brake",
+    17: "Stop",
+    18: "IncatLft",
+    19: "IncatRgt",
+    20: "HazLit",
+    21: "TurLft",
+    22: "TurRht",
+    23: "Ovtak",
+    24: "Wait2X",
+    25: "XingFmLft",
+    26: "XingFmRht",
+    27: "Xing",
+    28: "PushObj",
+    29: "VehLane",
+    30: "OutgoLane",
+    31: "OutgoCycLane",
+    32: "IncomLane",
+    33: "IncomCycLane",
+    34: "Pav",
+    35: "LftPav",
+    36: "RhtPav",
+    37: "Jun",
+    38: "xing",
+    39: "BusStop",
+    40: "parking"
+}
+
+ORIGINAL_LABEL_MAPPING = {
+    "agent": {
+        0: [0, "Ped"],
+        1: [1, "Car"],
+        2: [2, "Cyc"],
+        3: [3, "Mobike"],
+        5: [4, "MedVeh"],
+        6: [5, "LarVeh"],
+        7: [6, "Bus"],
+        8: [7, "EmVeh"],
+        9: [8, "TL"],
+        10: [9, "OthTL"]
+    },
+    "action": {
+        0: [10, "Red"],
+        1: [11, "Amber"],
+        2: [12, "Green"],
+        3: [13, "MovAway"],
+        4: [14, "MovTow"],
+        5: [15, "Mov"],
+        7: [16, "Brake"],
+        8: [17, "Stop"],
+        9: [18, "IncatLft"],
+        10: [19, "IncatRht"],
+        11: [20, "HazLit"],
+        12: [21, "TurLft"],
+        13: [22, "TurRht"],
+        16: [23, "Ovtak"],
+        17: [24, "Wait2X"],
+        18: [25, "XingFmLft"],
+        19: [26, "XingFmRht"],
+        20: [27, "Xing"],
+        21: [28, "PushObj"]
+    },
+    "loc": {
+        0: [29, "VehLane"],
+        1: [30, "OutgoLane"],
+        2: [31, "OutgoCycLane"],
+        3: [32, "IncomLane"],
+        4: [33, "IncomCycLane"],
+        5: [34, "Pav"],
+        6: [35, "LftPav"],
+        7: [36, "RhtPav"],
+        8: [37, "Jun"],
+        9: [38, "xing"],
+        10: [39, "BusStop"],
+        11: [40, "parking"]
+    }
+}
 
 
 def check_cached_file(out_file: str):

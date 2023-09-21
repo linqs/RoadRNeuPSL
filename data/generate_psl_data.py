@@ -8,17 +8,17 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 import utils
 
+from utils import NUM_CLASSES
+from utils import NUM_NEUPSL_QUERIES
+
 THIS_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 PSL_DATA_DIR = os.path.join(THIS_DIR, "psl-data")
 
 LOGGING_LEVEL = logging.INFO
 CONFIG_FILENAME = "config.json"
 
-NUM_CLASSES = 41
 AGENT_CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-# TODO(Connor): Adding confidence of bounding box as a class (first element - 41)
 BOUNDING_BOX_CLASSES = [41, 42, 43, 44, 45]
-BOUNDING_BOXES_PER_FRAME = 20
 
 
 def generate_experiment(experiment_dir, tube_size):
@@ -26,7 +26,7 @@ def generate_experiment(experiment_dir, tube_size):
 
     entity_data_map = []
     for tube_index in range(tube_size):
-        for bounding_box_index in range(BOUNDING_BOXES_PER_FRAME):
+        for bounding_box_index in range(NUM_NEUPSL_QUERIES):
             entity_data_map.append([tube_index, bounding_box_index])
 
     agent_classes = []
@@ -39,7 +39,7 @@ def generate_experiment(experiment_dir, tube_size):
 
     entity_targets = []
     for tube_index in range(tube_size):
-        for bounding_box_index in range(BOUNDING_BOXES_PER_FRAME):
+        for bounding_box_index in range(NUM_NEUPSL_QUERIES):
             for class_index in range(NUM_CLASSES + len(BOUNDING_BOX_CLASSES)):
                 entity_targets.append([tube_index, bounding_box_index, class_index])
 
@@ -61,7 +61,7 @@ def _load_args():
     parser = argparse.ArgumentParser(description="Generate Road-R PSL data.")
 
     parser.add_argument("--tube-size", dest="tubeSize",
-                        action="store", type=int, default=4,
+                        action="store", type=int, default=2,
                         help="The size of the tube used to generate the "
                              "symbolic data.")
 

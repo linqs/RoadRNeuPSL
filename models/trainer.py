@@ -11,13 +11,10 @@ from models.model_utils import save_model_state
 from torch.utils.data import DataLoader
 from typing import Tuple, List
 
-from utils import TRAINING_CONVERGENCE_FILENAME
-from utils import TRAINING_CONVERGENCE_CHECKPOINT_FILENAME
-from utils import TRAINED_MODEL_CHECKPOINT_FILENAME
-from utils import TRAINED_MODEL_FILENAME
-from utils import TRAINED_MODEL_FINAL_FILENAME
-from utils import TRAINING_SUMMARY_FILENAME
 from utils import EVALUATION_SUMMARY_FILENAME
+from utils import TRAINED_MODEL_FILENAME
+from utils import TRAINING_CONVERGENCE_FILENAME
+from utils import TRAINING_SUMMARY_FILENAME
 
 
 class Trainer:
@@ -30,21 +27,17 @@ class Trainer:
         self.out_directory = out_directory
         self.batch_predictions = None
 
-    def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader,
-              n_epochs: int = 500, compute_period: int = 1):
+    def train(self, training_dataloader: DataLoader, n_epochs: int = 500, compute_period: int = 1):
         """
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.
-        :param validation_dataloader: The validation data to use for validation.
         :param n_epochs: (Optional) The total number of epochs to run training.
         :param compute_period: (Optional) The number of epochs to run between each validation evaluation.
         """
         learning_convergence = ""
 
-        validation_score = float("inf")
-        best_validation_score = float("inf")
-        best_loss = 0
         total_time = 0
+        epoch_loss = 0
 
         previous_epoch_boxes = None
         previous_epoch_logits = None
@@ -69,7 +62,7 @@ class Trainer:
 
                     self.optimizer.zero_grad(set_to_none=True)
 
-                    loss = self.compute_training_loss(batch)
+                    loss = self._compute_loss(batch)
 
                     current_epoch_boxes.extend(self.batch_predictions['pred_boxes'].cpu().tolist())
                     current_epoch_logits.extend(self.batch_predictions['logits'].cpu().tolist())
@@ -80,23 +73,15 @@ class Trainer:
 
                     self.optimizer.step()
 
-                    tq.set_postfix(loss=epoch_loss / ((step + 1) * training_dataloader.batch_size), validation_score=validation_score, logit_movement=epoch_logit_movement, box_movement=epoch_box_movement)
+                    postfix_data = {
+                        'loss': epoch_loss / ((step + 1) * training_dataloader.batch_size),
+                        'logit_movement': epoch_logit_movement,
+                        'box_movement': epoch_box_movement,
+                    }
+
+                    tq.set_postfix(**postfix_data)
 
                 self.scheduler.step()
-
-            if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
-                validation_score = self.compute_validation_score(validation_dataloader)
-
-                if validation_score < best_validation_score:
-                    best_validation_score = validation_score
-                    best_loss = epoch_loss / (len(training_dataloader) * training_dataloader.batch_size)
-                    save_model_state(self.model, self.out_directory, TRAINED_MODEL_FILENAME)
-
-                with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_CHECKPOINT_FILENAME), 'w') as training_convergence_checkpoint_file:
-                    training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Training Loss, Validation Evaluation, Best Validation Evaluation, Logit Movement, Box Movement\n")
-                    training_convergence_checkpoint_file.write(learning_convergence)
-
-                save_model_state(self.model, self.out_directory, TRAINED_MODEL_CHECKPOINT_FILENAME)
 
             epoch_time = time.time() - epoch_start_time
             total_time += epoch_time
@@ -105,26 +90,27 @@ class Trainer:
                 epoch_logit_movement = torch.abs(torch.Tensor(previous_epoch_logits) - torch.Tensor(current_epoch_logits)).mean().item()
                 epoch_box_movement = torch.abs(torch.Tensor(previous_epoch_boxes) - torch.Tensor(current_epoch_boxes)).mean().item()
 
-            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
-                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), validation_score, best_validation_score, epoch_logit_movement, epoch_box_movement)
-
             previous_epoch_boxes = [] + current_epoch_boxes
             previous_epoch_logits = [] + current_epoch_logits
 
-        save_model_state(self.model, self.out_directory, TRAINED_MODEL_FINAL_FILENAME)
+            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
+                total_time, epoch_time, epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), epoch_logit_movement, epoch_box_movement)
+
+            if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
+                with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_FILENAME), 'w') as training_convergence_checkpoint_file:
+                    training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Training Loss, Logit Movement, Box Movement\n")
+                    training_convergence_checkpoint_file.write(learning_convergence)
+
+                save_model_state(self.model, self.out_directory, TRAINED_MODEL_FILENAME)
 
         if torch.cuda.is_available():
             max_gpu_mem = torch.cuda.max_memory_allocated()
         else:
             max_gpu_mem = -1
 
-        with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_FILENAME), 'w') as training_convergence_file:
-            training_convergence_file.write("Total Time(s), Epoch Time(s), Training Loss, Validation Evaluation, Best Validation Evaluation, Logit Movement, Box Movement\n")
-            training_convergence_file.write(learning_convergence)
-
         with open(os.path.join(self.out_directory, TRAINING_SUMMARY_FILENAME), 'w') as training_summary_file:
-            training_summary_file.write("Training Loss,Validation Evaluation,Total Time(s),Max GPU memory (B)\n")
-            training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:d}".format(best_loss, best_validation_score, total_time, max_gpu_mem))
+            training_summary_file.write("Training Loss,Total Time(s),Max GPU memory (B)\n")
+            training_summary_file.write("{:.5f}, {:.5f}, {:d}".format(epoch_loss / (len(training_dataloader) * training_dataloader.batch_size), total_time, max_gpu_mem))
 
     def evaluate(self, dataloader: DataLoader):
         """
@@ -158,7 +144,7 @@ class Trainer:
                 all_logits.extend(predictions['logits'].cpu().tolist())
                 all_frame_indexes.extend(frame_ids.cpu().tolist())
 
-                tq.set_postfix(loss=loss)
+                tq.set_postfix(loss=total_loss / ((step + 1) * dataloader.batch_size))
 
         total_time = time.time() - evaluation_start_time
 
@@ -169,34 +155,22 @@ class Trainer:
 
         with open(os.path.join(self.out_directory, EVALUATION_SUMMARY_FILENAME), 'w') as evaluation_summary_file:
             evaluation_summary_file.write("Average Loss,Total Time(s),Max GPU memory (B)\n")
-            evaluation_summary_file.write("{:.5f}, {:.5f}, {:d}".format(
-                total_loss / (len(dataloader) * dataloader.batch_size), total_time, max_gpu_mem))
+            evaluation_summary_file.write("{:.5f}, {:.5f}, {:d}".format(total_loss / (len(dataloader) * dataloader.batch_size), total_time, max_gpu_mem))
 
         return all_frame_indexes, all_box_predictions, all_logits
 
-    def compute_training_loss(self, batch: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2) -> torch.Tensor:
+    def compute_loss(self, dataloader: DataLoader) -> float:
         """
-        Compute the training loss for the provided batch.
-        :param batch: The batch to compute the training loss for.
-        :param bce_weight: The weight to apply to the binary cross entropy loss. Default is 1 from DETR paper.
-        :param giou_weight: The weight to apply to the generalized IoU loss. Default is 2 from DETR paper.
-        :return: The training loss for the provided batch.
+        Compute the loss for a dataloader.
+        :param dataloader: The dataloader to compute the loss for.
+        :return: The loss for the provided dataloader.
         """
-        return self._compute_loss(batch, bce_weight, giou_weight)
+        loss = 0.0
+        for batch in dataloader:
+            batch = [b.to(self.device) for b in batch]
 
-    def compute_validation_score(self, validation_data: DataLoader) -> float:
-        """
-        Compute the validation score for the provided validation data.
-        :param validation_data: The validation data to compute the validation score for.
-        :return: The validation score for the provided validation data.
-        """
-        validation_score = 0.0
-        for validation_batch in validation_data:
-            # Transfer the batch to the GPU.
-            validation_batch = [b.to(self.device) for b in validation_batch]
-
-            validation_score += self._compute_loss(validation_batch).item()
-        return validation_score / (len(validation_data) * validation_data.batch_size)
+            loss += self._compute_loss(batch).item()
+        return loss / (len(dataloader) * dataloader.batch_size)
 
     def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 2, l2_weight: int = 1) -> torch.Tensor:
         """

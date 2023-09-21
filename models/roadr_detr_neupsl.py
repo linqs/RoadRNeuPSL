@@ -3,58 +3,48 @@ import logging
 import os
 import sys
 
+import numpy
 import pslpython.deeppsl.model
 import torch.nn
 
 from torch.utils.data import DataLoader
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
 import utils
 
 from data.roadr_dataset import RoadRDataset
 from experiments.task1_evaluate import create_task_1_output_format
-from experiments.task1_evaluate import format_saved_predictions
-from experiments.task1_evaluate import sort_by_confidence
+from experiments.task1_evaluate import calculate_metrics
 from experiments.task1_pretrain import task_1_model
 from models.analysis import save_images_with_bounding_boxes
-from models.evaluation import filter_detections
-from models.evaluation import load_ground_truth_for_detections
-from models.evaluation import mean_average_precision
-from utils import EVALUATION_METRICS_FILENAME
-from utils import EVALUATION_PREDICTION_JSON_FILENAME
-from utils import EVALUATION_PREDICTION_PKL_FILENAME
+from utils import BASE_CLI_DIR
+from utils import BASE_RESULTS_DIR
+from utils import LABEL_CONFIDENCE_THRESHOLD
+from utils import NUM_NEUPSL_QUERIES
+from utils import NUM_QUERIES
+from utils import NUM_SAVED_IMAGES
+from utils import SEED
+from utils import TRAIN_VALIDATION_DATA_PATH
+from utils import TRAINED_MODEL_DIR
+from utils import TRAINED_MODEL_FILENAME
+from utils import VIDEO_PARTITIONS
 
-logger.initLogging(logging_level=logging.DEBUG)
 
-THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-DATA_DIR = os.path.join(THIS_DIR, "..", "data")
-DATA_FILE_NAME = 'road_trainval_v1.0.json'
+TASK_NAME = "task1"
 
-LABELED_VIDEOS = ["2014-06-26-09-53-12_stereo_centre_02",
-                  "2014-11-25-09-18-32_stereo_centre_04",
-                  "2015-02-13-09-16-26_stereo_centre_02"]
+LOAD_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
+LOAD_PSL_LABELS_PATH = os.path.join(BASE_CLI_DIR, "inferred-predicates", "LABEL.txt")
+OUT_DIR = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_evaluation")
 
-MAX_FRAMES = 10
-BATCH_SIZE = 4
-NUM_CLASSES = 41
-NUM_BOXES = 4
-NUM_QUERIES = 100
-NUM_NEUPSL_QUERIES = 20
-IMAGE_RESIZE = 0.4
+LABELED_VIDEOS = VIDEO_PARTITIONS[TASK_NAME]["VALID"]
 
-IOU_THRESHOLD = 0.5
-LABEL_CONFIDENCE_THRESHOLD = 0.025
-
-SAVE_MODEL_PATH = os.path.join(THIS_DIR, "..", "results", "task1", "trained_model", "trained_model_parameters_checkpoint.pt")
-OUT_DIR = os.path.join(THIS_DIR, "..", "results", "task1", "trained_model", "neuspl_evaluation")
+BATCH_INCOMPLETE = 0
+BATCH_COMPLETE = 1
 
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
-    """
-    DETR Model from: <https://arxiv.org/pdf/2005.12872.pdf>
-    """
     def __init__(self):
         super().__init__()
         self.application = None
@@ -63,28 +53,29 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.dataloader = None
         self.iterator = None
         self.model = None
-        self.optimizer = None
-        self.lr_scheduler = None
 
-        self.current_batch = None
         self.batch_predictions = None
 
-        self.batch_index = 0
-
         self.all_box_predictions = []
-        self.all_logits = []
+        self.all_class_predictions = []
         self.all_frame_indexes = []
+
+        utils.seed_everything(SEED)
+        logger.initLogging(logging_level=logging.INFO)
 
     def internal_init_model(self, application, options={}):
         logging.info("Initializing neural model for application: {0}".format(application))
         self.application = application
 
-        self.dataset = RoadRDataset(LABELED_VIDEOS, os.path.join(DATA_DIR, DATA_FILE_NAME), IMAGE_RESIZE, NUM_QUERIES, max_frames=MAX_FRAMES)
-        self.dataloader = DataLoader(self.dataset, batch_size=BATCH_SIZE, shuffle=False)
+        self.dataset = RoadRDataset(LABELED_VIDEOS, TRAIN_VALIDATION_DATA_PATH, float(options['image-resize']), max_frames=int(options['max-frames']))
+        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]), shuffle=False)
         self.iterator = iter(self.dataloader)
+        self.current_batch = next(self.iterator, None)
 
         self.model = task_1_model()
-        self.model.load_state_dict(torch.load(SAVE_MODEL_PATH))
+        self.model.load_state_dict(torch.load(LOAD_MODEL_PATH))
+
+        self.batch_predictions = torch.empty(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
         return {}
 
@@ -94,60 +85,32 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_predict(self, data, options={}):
         self.set_model_application()
 
-        self.current_batch = [b.to(utils.get_torch_device()) for b in next(self.iterator)]
+        frame_ids, pixel_values, pixel_mask, labels, boxes = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
-        frame_ids, pixel_values, pixel_mask, labels, boxes = self.current_batch
-
-        self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+        batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
         self.all_frame_indexes.extend(frame_ids.cpu().tolist())
-        self.filter_batch_predictions()
 
-        return self.format_predictions(), {}
+        return self.format_batch_predictions(batch_predictions["logits"].detach().cpu(), batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
 
-    def internal_eval(self, data, predictions, options={}):
+    def internal_eval(self, data, options={}):
         self.set_model_application()
 
-        for batch_index in range(BATCH_SIZE):
-            self.all_box_predictions.append([])
-            self.all_logits.append([])
-            for query_index in range(NUM_QUERIES):
-                if query_index < NUM_NEUPSL_QUERIES:
-                    self.all_box_predictions[-1].append(predictions[batch_index * NUM_NEUPSL_QUERIES + query_index][-4:].tolist())
-                    self.all_logits[-1].append(predictions[batch_index * NUM_NEUPSL_QUERIES + query_index][:-4].tolist())
-                else:
-                    self.all_box_predictions[-1].append([0] * NUM_BOXES)
-                    self.all_logits[-1].append([0] * (NUM_CLASSES + 1))
+        self.format_batch_results(options=options)
 
-        if self.batch_index == 5:
-            output_dict = create_task_1_output_format(self.dataset, self.all_frame_indexes, self.all_logits, self.all_box_predictions, from_logits=False)
+        self.current_batch = next(self.iterator, None)
 
+        if self.current_batch is None:
             os.makedirs(OUT_DIR, exist_ok=True)
 
-            logging.info("Saving pkl predictions to %s" % os.path.join(OUT_DIR, EVALUATION_PREDICTION_PKL_FILENAME))
-            utils.write_pkl_file(os.path.join(OUT_DIR, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
+            create_task_1_output_format(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
 
-            logging.info("Saving json predictions to %s" % os.path.join(OUT_DIR, EVALUATION_PREDICTION_JSON_FILENAME))
-            utils.write_json_file(os.path.join(OUT_DIR, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
+            calculate_metrics(self.dataset, OUT_DIR)
 
-            logging.info("Loading predictions.")
-            loaded_predictions = utils.load_json_file(os.path.join(OUT_DIR, EVALUATION_PREDICTION_JSON_FILENAME))
-            frame_indexes, class_predictions, box_predictions = format_saved_predictions(loaded_predictions, self.dataset)
+            save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
 
-            logging.info("Calculating metrics.")
-            filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
-            filtered_detections_ground_truth = load_ground_truth_for_detections(self.dataset, filtered_detection_indexes)
+            return BATCH_COMPLETE, {}
 
-            mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
-            logging.info("Mean average precision: %s" % mean_avg_prec)
-
-            logging.info("Saving metrics to %s" % os.path.join(OUT_DIR, EVALUATION_METRICS_FILENAME))
-            utils.write_json_file(os.path.join(OUT_DIR, EVALUATION_METRICS_FILENAME), {"mean_avg_prec": mean_avg_prec})
-
-            save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, 3, LABEL_CONFIDENCE_THRESHOLD)
-
-        self.batch_index += 1
-
-        return {}
+        return BATCH_INCOMPLETE, {}
 
     def internal_save(self, options={}):
         return {}
@@ -158,19 +121,42 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         else:
             self.model.train()
 
-    def format_predictions(self):
-        self.batch_predictions["logits"] = torch.sigmoid(self.batch_predictions["logits"])
-        batch_predictions = torch.cat((self.batch_predictions["logits"], self.batch_predictions["pred_boxes"]), dim=-1)
-        batch_predictions = batch_predictions.flatten(start_dim=0, end_dim=1)
-        return batch_predictions.cpu().detach().numpy().tolist()
+    def format_batch_predictions(self, logits, boxes, options={}):
+        self.batch_predictions = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
-    def filter_batch_predictions(self):
-        batch_filterd_logits = []
-        batch_filtered_boxes = []
-        for logit, box in zip(self.batch_predictions['logits'].cpu().tolist(), self.batch_predictions['pred_boxes'].cpu().tolist()):
-            filtered_logits, filtered_boxes = sort_by_confidence(logit, box)
-            batch_filterd_logits.append(filtered_logits[:NUM_NEUPSL_QUERIES])
-            batch_filtered_boxes.append(filtered_boxes[:NUM_NEUPSL_QUERIES])
+        batch_predictions_sorted_indexes = torch.argsort(logits[:, :, -1], descending=True)
+        batch_predictions = torch.cat((torch.sigmoid(logits), boxes), dim=-1)
 
-        self.batch_predictions['logits'] = torch.tensor(batch_filterd_logits).to(utils.get_torch_device())
-        self.batch_predictions['pred_boxes'] = torch.tensor(batch_filtered_boxes).to(utils.get_torch_device())
+        for batch_index in range(len(batch_predictions)):
+            for box_index in range(NUM_NEUPSL_QUERIES):
+                self.batch_predictions[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
+
+        return self.batch_predictions.flatten(start_dim=0, end_dim=1).cpu().detach().numpy().tolist()
+
+    def format_batch_results(self, options={}):
+        box_predictions = numpy.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, 4), dtype=numpy.float32)
+        class_predictions = numpy.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, int(options["class-size"]) - 4), dtype=numpy.float32)
+
+        line_count = 0
+        predictions_index = 0
+        with open(LOAD_PSL_LABELS_PATH, "r") as file:
+            for line in file.readlines():
+                if line_count % (int(options["class-size"]) * NUM_NEUPSL_QUERIES) == 0 and predictions_index > 0:
+                    predictions_index += int(options["class-size"]) * (NUM_QUERIES - NUM_NEUPSL_QUERIES)
+
+                batch_index = predictions_index // (int(options["class-size"]) * NUM_QUERIES)
+                query_index = predictions_index % (int(options["class-size"]) * NUM_QUERIES) // int(options["class-size"])
+                class_index = predictions_index % int(options["class-size"])
+
+                if class_index > int(options["class-size"]) - 5:
+                    box_predictions[batch_index][query_index][class_index - (int(options["class-size"]) - 4)] = self.batch_predictions[batch_index][query_index][class_index]
+                elif class_index == int(options["class-size"]) - 5:
+                    class_predictions[batch_index][query_index][class_index] = self.batch_predictions[batch_index][query_index][class_index]
+                else:
+                    class_predictions[batch_index][query_index][class_index] = float(line.strip().split("\t")[-1])
+
+                line_count += 1
+                predictions_index += 1
+
+        self.all_box_predictions.extend(box_predictions.tolist())
+        self.all_class_predictions.extend(class_predictions.tolist())

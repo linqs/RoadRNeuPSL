@@ -13,34 +13,30 @@ from torch.utils.data import DataLoader
 
 from data.roadr_dataset import RoadRDataset
 from experiments.task1_pretrain import task_1_model
-from experiments.task1_pretrain import TASK_NAME
 from models.analysis import save_images_with_bounding_boxes
+from models.evaluation import count_violated_pairwise_constraints
 from models.evaluation import filter_detections
+from models.evaluation import format_pairwise_constraints
 from models.evaluation import load_ground_truth_for_detections
 from models.evaluation import mean_average_precision
 from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
+from utils import BOX_CONFIDENCE_THRESHOLD
+from utils import CONSTRAINTS_PATH
 from utils import EVALUATION_METRICS_FILENAME
 from utils import EVALUATION_PREDICTION_JSON_FILENAME
 from utils import EVALUATION_PREDICTION_PKL_FILENAME
+from utils import IOU_THRESHOLD
+from utils import LABEL_CONFIDENCE_THRESHOLD
+from utils import NUM_SAVED_IMAGES
+from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
+from utils import VIDEO_PARTITIONS
 
 
-EVAL_VIDEOS = {
-    "TRAIN": ["2014-07-14-14-49-50_stereo_centre_01",
-              "2015-02-03-19-43-11_stereo_centre_04",
-              "2015-02-24-12-32-19_stereo_centre_04"],
-    "VALID": ["2014-06-26-09-53-12_stereo_centre_02",
-              "2014-11-25-09-18-32_stereo_centre_04",
-              "2015-02-13-09-16-26_stereo_centre_02"]
-}
-
-BOX_CONFIDENCE_THRESHOLD = 0.70
-# LABEL_CONFIDENCE_THRESHOLD = 0.20
-LABEL_CONFIDENCE_THRESHOLD = 0.025
-IOU_THRESHOLD = 0.50
+TASK_NAME = "task1"
 
 
 def sigmoid_list_of_logits(logits):
@@ -51,7 +47,7 @@ def sort_by_confidence(frame_logits, frame_boxes):
     return zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
 
 
-def create_task_1_output_format(dataset, frame_indexes, logits, boxes, from_logits=True):
+def create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_dir=None, from_logits=True):
     output_dict = {}
 
     for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
@@ -73,6 +69,13 @@ def create_task_1_output_format(dataset, frame_indexes, logits, boxes, from_logi
                 output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
             else:
                 output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
+
+    if output_dir is not None:
+        logging.info("Saving pkl predictions to %s" % os.path.join(output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
+        utils.write_pkl_file(os.path.join(output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
+
+        logging.info("Saving json predictions to %s" % os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+        utils.write_json_file(os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
 
     return output_dict
 
@@ -111,36 +114,45 @@ def evaluate_dataset(dataset, arguments):
     trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
 
     frame_indexes, boxes, logits = trainer.evaluate(dataloader)
-    output_dict = create_task_1_output_format(dataset, frame_indexes, logits, boxes)
-
-    logging.info("Saving pkl predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
-    utils.write_pkl_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
-
-    logging.info("Saving json predictions to %s" % os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
-    utils.write_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
+    create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
 
 
-def calculate_metrics(dataset, arguments):
-    if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME)):
-        logging.info("Skipping calculation metrics for %s, already exists." % (os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME),))
+def calculate_metrics(dataset, output_dir):
+    if os.path.isfile(os.path.join(output_dir, EVALUATION_METRICS_FILENAME)):
+        logging.info("Skipping calculation metrics for %s, already exists." % (os.path.join(output_dir, EVALUATION_METRICS_FILENAME),))
 
-        results = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME))
-        logging.info("Saved mean average precision: %s" % results["mean_avg_prec"])
+        results = utils.load_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
+        logging.info("Saved metrics: %s" % results)
         return
 
     logging.info("Loading predictions.")
-    predictions = utils.load_json_file(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+    predictions = utils.load_json_file(os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
     frame_indexes, class_predictions, box_predictions = format_saved_predictions(predictions, dataset)
 
     logging.info("Calculating metrics.")
+
+    logging.info("Calculating mean average precision.")
     filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
     filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
-
     mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
-    logging.info("Saving metrics to %s" % os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME))
-    utils.write_json_file(os.path.join(arguments.output_dir, EVALUATION_METRICS_FILENAME), {"mean_avg_prec": mean_avg_prec})
+    logging.info("Counting constraint violations.")
+    pairwise_constraints = format_pairwise_constraints(utils.load_csv_file(CONSTRAINTS_PATH, ','))
+    num_constraint_violations, num_frames_with_violation, constraint_violation_dict = count_violated_pairwise_constraints(class_predictions, pairwise_constraints, positive_threshold=LABEL_CONFIDENCE_THRESHOLD)
+    logging.info("Number of constraint violations: {}".format(num_constraint_violations))
+    logging.info("Number of frames with constraint violations: {}".format(num_frames_with_violation))
+    logging.info("Constraint violation dict: {}".format(constraint_violation_dict))
+
+    metrics = {
+        "mean_avg_prec": mean_avg_prec,
+        "num_constraint_violations": num_constraint_violations,
+        "num_frames_with_violation": num_frames_with_violation,
+        "constraint_violation_dict": constraint_violation_dict
+    }
+
+    logging.info("Saving metrics to %s" % os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
+    utils.write_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME), metrics)
 
 
 def save_images(dataset, arguments):
@@ -164,13 +176,13 @@ def main(arguments):
     logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
     logging.info("Loading evaluation videos: %s" % arguments.eval_videos.upper())
-    dataset = RoadRDataset(EVAL_VIDEOS[arguments.eval_videos.upper()], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, arguments.num_queries, max_frames=arguments.max_frames)
+    dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME][arguments.eval_videos.upper()], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
 
     logging.info("Evaluating dataset.")
     evaluate_dataset(dataset, arguments)
 
     logging.info("Calculating metrics.")
-    calculate_metrics(dataset, arguments)
+    calculate_metrics(dataset, arguments.output_dir)
 
     logging.info("Saving images with bounding boxes.")
     save_images(dataset, arguments)
@@ -180,38 +192,35 @@ def _load_args():
     parser = argparse.ArgumentParser(description="Evaluating Task 1.")
 
     parser.add_argument("--seed", dest="seed",
-                        action="store", type=int, default=4,
+                        action="store", type=int, default=SEED,
                         help="Seed for random number generator.")
-    parser.add_argument("--eval-videos", dest="eval_videos",
-                        action="store", type=str, default="VALID",
-                        help="Videos to evaluate on.", choices=["TRAIN", "VALID"])
-    parser.add_argument("--image-resize", dest="image_resize",
-                        action="store", type=float, default=1.0,
-                        help="Resize factor for all images.")
-    parser.add_argument("--num-queries", dest="num_queries",
-                        action="store", type=int, default=20,
-                        help="Number of object queries, ie detection slot, in a frame.")
-    parser.add_argument("--max-frames", dest="max_frames",
-                        action="store", type=int, default=0,
-                        help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
-    parser.add_argument("--save-images", dest="save_images",
-                        action="store", type=str, default="NONE",
-                        help="Save images with bounding boxes.", choices=["NONE", "BOXES", "BOXES_AND_LABELS"])
-    parser.add_argument("--max-saved-images", dest="max_saved_images",
-                        action="store", type=int, default=10,
-                        help="Maximum number of images saved per video.")
-    parser.add_argument("--batch-size", dest="batch_size",
-                        action="store", type=int, default=2,
-                        help="Batch size.")
     parser.add_argument("--log-level", dest="log_level",
                         action="store", type=str, default="INFO",
                         help="Logging level.", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+    parser.add_argument("--image-resize", dest="image_resize",
+                        action="store", type=float, default=1.0,
+                        help="Resize factor for all images.")
+    parser.add_argument("--max-frames", dest="max_frames",
+                        action="store", type=int, default=0,
+                        help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
+    parser.add_argument("--eval-videos", dest="eval_videos",
+                        action="store", type=str, default="VALID",
+                        help="Videos to evaluate on.", choices=["TRAIN", "VALID"])
+    parser.add_argument("--batch-size", dest="batch_size",
+                        action="store", type=int, default=32,
+                        help="Batch size.")
     parser.add_argument("--saved-model-path", dest="saved_model_path",
                         action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME),
                         help="Path to model parameters to load.")
     parser.add_argument("--output-dir", dest="output_dir",
                         action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "evaluation"),
                         help="Directory to save results to.")
+    parser.add_argument("--save-images", dest="save_images",
+                        action="store", type=str, default="NONE",
+                        help="Save images with bounding boxes.", choices=["NONE", "BOXES", "BOXES_AND_LABELS"])
+    parser.add_argument("--max-saved-images", dest="max_saved_images",
+                        action="store", type=int, default=NUM_SAVED_IMAGES,
+                        help="Maximum number of images saved per video.")
 
     arguments = parser.parse_args()
 

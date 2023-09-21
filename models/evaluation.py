@@ -3,7 +3,7 @@ import torch
 from torchmetrics.detection import MeanAveragePrecision
 from torchvision.ops import nms
 
-NUM_CLASSES = 41
+from utils import NUM_CLASSES
 
 
 def filter_detections(frame_indexes, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, num_classes=NUM_CLASSES):
@@ -67,7 +67,7 @@ def load_ground_truth_for_detections(dataset, indexes, num_classes=NUM_CLASSES):
         for class_index in range(num_classes):
             class_frame_truth_labels = frame_truth_labels[:, class_index]
 
-            mask_class_frame_truth_labels = class_frame_truth_labels.gt(0)
+            mask_class_frame_truth_labels = class_frame_truth_labels.gt(0.5)
 
             if class_frame_truth_labels.sum() == 0:
                 ground_truth.append({'boxes': torch.Tensor([]), 'labels': torch.Tensor([])})
@@ -94,3 +94,58 @@ def mean_average_precision(ground_truths, detections, iou_threshold=0.5):
     values = map_metric.compute()
 
     return float(values['map'])
+
+
+def format_pairwise_constraints(pairwise_constraints):
+    """
+    Formats the pairwise constraints.
+    :param pairwise_constraints:
+    :return: Dictionary containing the pairwise constraints.
+    """
+    formatted_pairwise_constraints = {}
+    for index_i in range(1, len(pairwise_constraints)):
+        formatted_pairwise_constraints[index_i] = {}
+        for index_j in range(1, len(pairwise_constraints[index_i])):
+            formatted_pairwise_constraints[index_i][index_j] = int(pairwise_constraints[index_i][index_j])
+
+    return formatted_pairwise_constraints
+
+
+def count_violated_pairwise_constraints(frame_predictions, constraints, positive_threshold=0.5):
+    """
+    Counts the number of violated pairwise constraints.
+    :param frame_predictions: List of shape (N, Q, C) containing the predicted frame probabilities.
+    :param constraints: Dictionary of potential violations.
+    :param positive_threshold: Threshold for the positive class.
+    :return: Number of violated constraints, Number of frames with a violation.
+    """
+    num_constraint_violations = 0
+    num_frames_with_violation = 0
+
+    constraint_violation_dict = {}
+
+    for frame_prediction in frame_predictions:
+        frame_violation = False
+        for box_prediction in frame_prediction:
+            for index_i in range(len(box_prediction)):
+                for index_j in range(len(box_prediction)):
+                    if index_i == index_j:
+                        continue
+
+                    if index_i not in constraints or index_j not in constraints[index_i] or constraints[index_i][index_j] == 1:
+                        continue
+
+                    if float(box_prediction[index_i]) > positive_threshold and float(box_prediction[index_j]) > positive_threshold:
+                        if index_i not in constraint_violation_dict:
+                            constraint_violation_dict[index_i] = {}
+                        if index_j not in constraint_violation_dict[index_i]:
+                            constraint_violation_dict[index_i][index_j] = 0
+
+                        constraint_violation_dict[index_i][index_j] += 1
+                        num_constraint_violations += 1
+                        frame_violation = True
+
+        if frame_violation:
+            num_frames_with_violation += 1
+
+    return num_constraint_violations, num_frames_with_violation, constraint_violation_dict

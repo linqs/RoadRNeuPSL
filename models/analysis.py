@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 import utils
 from utils import BASE_RGB_IMAGES_DIR
 from utils import EVALUATION_PREDICTION_JSON_FILENAME
+from utils import LABEL_MAPPING
 
 
 FONT_SIZE = 7
@@ -76,7 +77,7 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
     :param labels_confidence_threshold: Label confidence used to output labels on images with labels.
     """
     predictions = utils.load_json_file(os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
-    label_mapping = dataset.label_mapping()
+    label_mapping = LABEL_MAPPING
 
     for video_id, video_predictions in predictions.items():
         images_saved_for_video = 0

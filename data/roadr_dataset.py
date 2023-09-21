@@ -9,65 +9,15 @@ from PIL import Image
 from torch.utils.data import Dataset
 from transformers import DetrImageProcessor
 
+from utils import NUM_CLASSES
+from utils import ORIGINAL_LABEL_MAPPING
+
 THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
 IMAGE_HEIGHT = 960
 IMAGE_WIDTH = 1280
-IMAGE_MEAN = [0.485, 0.456, 0.406]
-IMAGE_STD = [0.229, 0.224, 0.225]
 
 LABEL_TYPES = ['agent', 'action', 'loc']
-NUM_CLASSES = 41
-
-LABEL_MAPPING = {
-    "agent": {
-        0: [0, "Ped"],
-        1: [1, "Car"],
-        2: [2, "Cyc"],
-        3: [3, "Mobike"],
-        5: [4, "MedVeh"],
-        6: [5, "LarVeh"],
-        7: [6, "Bus"],
-        8: [7, "EmVeh"],
-        9: [8, "TL"],
-        10: [9, "OthTL"]
-    },
-    "action": {
-        0: [10, "Red"],
-        1: [11, "Amber"],
-        2: [12, "Green"],
-        3: [13, "MovAway"],
-        4: [14, "MovTow"],
-        5: [15, "Mov"],
-        7: [16, "Brake"],
-        8: [17, "Stop"],
-        9: [18, "IncatLft"],
-        10: [19, "IncatRht"],
-        11: [20, "HazLit"],
-        12: [21, "TurLft"],
-        13: [22, "TurRht"],
-        16: [23, "Ovtak"],
-        17: [24, "Wait2X"],
-        18: [25, "XingFmLft"],
-        19: [26, "XingFmRht"],
-        20: [27, "Xing"],
-        21: [28, "PushObj"]
-    },
-    "loc": {
-        0: [29, "VehLane"],
-        1: [30, "OutgoLane"],
-        2: [31, "OutgoCycLane"],
-        3: [32, "IncomLane"],
-        4: [33, "IncomCycLane"],
-        5: [34, "Pav"],
-        6: [35, "LftPav"],
-        7: [36, "RhtPav"],
-        8: [37, "Jun"],
-        9: [38, "xing"],
-        10: [39, "BusStop"],
-        11: [40, "parking"]
-    }
-}
 
 
 class RoadRDataset(Dataset):
@@ -75,7 +25,7 @@ class RoadRDataset(Dataset):
                  videos,
                  data_path,
                  image_resize,
-                 num_queries,
+                 num_queries=100,
                  start_frame_percentage=0.0,
                  end_frame_percentage=1.0,
                  max_frames=0):
@@ -176,9 +126,9 @@ class RoadRDataset(Dataset):
                     frame_labels[bounding_box_index, -1] = 1  # Set the last class to 1 to indicate that there is an object box here.
                     for label_type in LABEL_TYPES:
                         for label_id in frame['annos'][bounding_box][label_type + '_ids']:
-                            if int(label_id) not in LABEL_MAPPING[label_type]:
+                            if int(label_id) not in ORIGINAL_LABEL_MAPPING[label_type]:
                                 continue
-                            frame_labels[bounding_box_index][LABEL_MAPPING[label_type][int(label_id)][0]] = True
+                            frame_labels[bounding_box_index][ORIGINAL_LABEL_MAPPING[label_type][int(label_id)][0]] = True
 
                 self.labels[frame_index] = frame_labels
                 self.boxes[frame_index] = frame_boxes
@@ -200,14 +150,6 @@ class RoadRDataset(Dataset):
 
     def image_width(self):
         return int(IMAGE_WIDTH * self.image_resize)
-
-    def label_mapping(self):
-        reverse_label_mapping = {}
-        for label_type in LABEL_MAPPING:
-            for label_id in LABEL_MAPPING[label_type]:
-                reverse_label_mapping[LABEL_MAPPING[label_type][label_id][0]] = LABEL_MAPPING[label_type][label_id][1]
-
-        return reverse_label_mapping
 
     def __len__(self):
         return len(self.frames)

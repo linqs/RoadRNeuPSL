@@ -22,6 +22,23 @@ def binary_cross_entropy_with_logits(outputs, truth, indices) -> torch.Tensor:
     return torch.nn.functional.binary_cross_entropy_with_logits(aligned_outputs, aligned_truth)
 
 
+def pairwise_l2_loss(boxes1, boxes2, indices) -> torch.Tensor:
+    """
+    Computes the pairwise l2 loss for the given outputs and targets aligned using the given indices.
+    :param boxes1: The first set of boxes. tensor of shape [batch_size, num_queries, 4]
+    :param boxes2: The second set of boxes. tensor of shape [batch_size, num_queries, 4]
+    :param indices: The indices used to align the boxes. A list of size batch_size, containing tuples of (index_i, index_j) where:
+                - index_i is the indices of the selected predictions (in order)
+                - index_j is the indices of the corresponding selected targets (in order)
+    :return: The computed pairwise l2 loss.
+    """
+    # Align the boxes using the given indices.
+    aligned_boxes1 = torch.stack([boxes1[i, indices[i, 0, :], :] for i in range(boxes1.shape[0])]).flatten(0, 1)
+    aligned_boxes2 = torch.stack([boxes2[i, indices[i, 1, :], :] for i in range(boxes2.shape[0])]).flatten(0, 1)
+
+    return torch.nn.functional.mse_loss(aligned_boxes1, aligned_boxes2)
+
+
 def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:
     """
     Computes the pairwise generalized box iou loss for the given outputs and targets aligned using the given indices.
@@ -80,20 +97,3 @@ def generalized_box_iou(boxes1, boxes2):
     area = wh[:, :, 0] * wh[:, :, 1]
 
     return iou - (area - union) / area
-
-
-def pairwise_l2_loss(boxes1, boxes2, indices) -> torch.Tensor:
-    """
-    Computes the pairwise l2 loss for the given outputs and targets aligned using the given indices.
-    :param boxes1: The first set of boxes. tensor of shape [batch_size, num_queries, 4]
-    :param boxes2: The second set of boxes. tensor of shape [batch_size, num_queries, 4]
-    :param indices: The indices used to align the boxes. A list of size batch_size, containing tuples of (index_i, index_j) where:
-                - index_i is the indices of the selected predictions (in order)
-                - index_j is the indices of the corresponding selected targets (in order)
-    :return: The computed pairwise l2 loss.
-    """
-    # Align the boxes using the given indices.
-    aligned_boxes1 = torch.stack([boxes1[i, indices[i, 0, :], :] for i in range(boxes1.shape[0])]).flatten(0, 1)
-    aligned_boxes2 = torch.stack([boxes2[i, indices[i, 1, :], :] for i in range(boxes2.shape[0])]).flatten(0, 1)
-
-    return torch.nn.functional.mse_loss(aligned_boxes1, aligned_boxes2)
