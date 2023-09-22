@@ -216,7 +216,7 @@ def _load_args():
                         action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "evaluation"),
                         help="Directory to save results to.")
     parser.add_argument("--save-images", dest="save_images",
-                        action="store", type=str, default="NONE",
+                        action="store", type=str, default="BOXES_AND_LABELS",
                         help="Save images with bounding boxes.", choices=["NONE", "BOXES", "BOXES_AND_LABELS"])
     parser.add_argument("--max-saved-images", dest="max_saved_images",
                         action="store", type=int, default=NUM_SAVED_IMAGES,

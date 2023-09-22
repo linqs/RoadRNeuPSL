@@ -46,7 +46,7 @@ DEFAULT_PARAMETERS = {
     "dropout": 0.0,
     "step-size": 500,
     "gamma": 1.0,
-    "epochs": 3
+    "epochs": 100
 }
 
 

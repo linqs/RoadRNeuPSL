@@ -103,10 +103,10 @@ def format_pairwise_constraints(pairwise_constraints):
     :return: Dictionary containing the pairwise constraints.
     """
     formatted_pairwise_constraints = {}
-    for index_i in range(1, len(pairwise_constraints)):
+    for index_i in range(len(pairwise_constraints) - 1):
         formatted_pairwise_constraints[index_i] = {}
-        for index_j in range(1, len(pairwise_constraints[index_i])):
-            formatted_pairwise_constraints[index_i][index_j] = int(pairwise_constraints[index_i][index_j])
+        for index_j in range(len(pairwise_constraints[index_i]) - 1):
+            formatted_pairwise_constraints[index_i][index_j] = int(pairwise_constraints[index_i + 1][index_j + 1])
 
     return formatted_pairwise_constraints
 
@@ -122,28 +122,54 @@ def count_violated_pairwise_constraints(frame_predictions, constraints, positive
     num_constraint_violations = 0
     num_frames_with_violation = 0
 
-    constraint_violation_dict = {}
+    constraint_violation_dict = {
+        "simplex": {
+            "no-agent": 0,
+            "no-location": 0
+        }
+    }
 
     for frame_prediction in frame_predictions:
         frame_violation = False
-        for box_prediction in frame_prediction:
-            for index_i in range(len(box_prediction)):
-                for index_j in range(len(box_prediction)):
-                    if index_i == index_j:
+        for detection in frame_prediction:
+            class_predictions = [index for index, value in enumerate(detection) if value > positive_threshold]
+
+            if len(class_predictions) == 0:
+                continue
+
+            has_agent = False
+            has_location = False
+
+            for index_i, class_i in enumerate(class_predictions):
+                if class_i < 10:
+                    has_agent = True
+                if class_i == 8 or class_i == 9:
+                    has_location = True
+                if class_i > 28:
+                    has_location = True
+
+                for index_j, class_j in enumerate(class_predictions[index_i + 1:]):
+
+                    if constraints[class_i][class_j] == 1:
                         continue
 
-                    if index_i not in constraints or index_j not in constraints[index_i] or constraints[index_i][index_j] == 1:
-                        continue
+                    if class_i not in constraint_violation_dict:
+                        constraint_violation_dict[class_i] = {}
+                    if class_j not in constraint_violation_dict[class_i]:
+                        constraint_violation_dict[class_i][class_j] = 0
 
-                    if float(box_prediction[index_i]) > positive_threshold and float(box_prediction[index_j]) > positive_threshold:
-                        if index_i not in constraint_violation_dict:
-                            constraint_violation_dict[index_i] = {}
-                        if index_j not in constraint_violation_dict[index_i]:
-                            constraint_violation_dict[index_i][index_j] = 0
+                    constraint_violation_dict[class_i][class_j] += 1
+                    num_constraint_violations += 1
+                    frame_violation = True
 
-                        constraint_violation_dict[index_i][index_j] += 1
-                        num_constraint_violations += 1
-                        frame_violation = True
+            if not has_agent:
+                constraint_violation_dict["simplex"]["no-agent"] += 1
+                num_constraint_violations += 1
+                frame_violation = True
+            if not has_location:
+                constraint_violation_dict["simplex"]["no-location"] += 1
+                num_constraint_violations += 1
+                frame_violation = True
 
         if frame_violation:
             num_frames_with_violation += 1
