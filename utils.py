@@ -13,6 +13,7 @@ BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
 BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
 
 BASE_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "rgb-images")
+BASE_RGB_IMAGES_PROCESSED_DIR = os.path.join(BASE_DATA_DIR, "rgb-images-processed")
 
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
@@ -48,6 +49,8 @@ VIDEO_PARTITIONS = {
                   "2015-02-13-09-16-26_stereo_centre_02"]
     }
 }
+
+LABEL_TYPES = ['agent', 'action', 'loc']
 
 LABEL_MAPPING = {
     0: "Ped",
