@@ -20,7 +20,7 @@ from utils import TRAINING_SUMMARY_FILENAME
 
 class Trainer:
     def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
-                 scheduler: torch.optim.lr_scheduler.LRScheduler, device: torch.device, out_directory: str):
+                 scheduler, device: torch.device, out_directory: str):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
