@@ -13,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 import utils
 
-from data.roadr_dataset import RoadRDataset
+from data.stream_roadr_dataset import RoadRDataset
 from models.trainer import Trainer
 from utils import BASE_RESULTS_DIR
 from utils import NUM_CLASSES
@@ -23,7 +23,6 @@ from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
 from utils import TRAINING_SUMMARY_FILENAME
 from utils import VIDEO_PARTITIONS
-
 
 TASK_NAME = "task1"
 
@@ -64,7 +63,7 @@ def run_setting(arguments, train_dataset, parameters, parameters_string):
 
     os.makedirs(os.path.join(BASE_RESULTS_DIR, TASK_NAME, parameters_string), exist_ok=True)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=parameters["batch-size"], shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=parameters["batch-size"], shuffle=True, num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
 
     model = task_1_model()
 

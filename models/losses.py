@@ -17,7 +17,7 @@ def binary_cross_entropy_with_logits(outputs, truth, indices) -> torch.Tensor:
     """
     # Align the outputs and targets using the given indices and flatten.
     aligned_outputs = torch.stack([outputs[i, indices[i, 0, :], :] for i in range(outputs.shape[0])]).flatten(0, 1)
-    aligned_truth = torch.stack([truth[i, indices[i, 1, :], :] for i in range(truth.shape[0])]).flatten(0, 1)
+    aligned_truth = torch.stack([truth[i, indices[i, 1, :], :] for i in range(truth.shape[0])]).flatten(0, 1).to(torch.float32)
 
     return torch.nn.functional.binary_cross_entropy_with_logits(aligned_outputs, aligned_truth)
 

@@ -9,13 +9,12 @@ from PIL import Image
 from torch.utils.data import Dataset
 from transformers import DetrImageProcessor
 
+from utils import IMAGE_HEIGHT
+from utils import IMAGE_WIDTH
 from utils import NUM_CLASSES
 from utils import ORIGINAL_LABEL_MAPPING
 
 THIS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)))
-
-IMAGE_HEIGHT = 960
-IMAGE_WIDTH = 1280
 
 LABEL_TYPES = ['agent', 'action', 'loc']
 
