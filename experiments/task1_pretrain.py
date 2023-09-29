@@ -87,7 +87,8 @@ def main(arguments):
     logging.info("Beginning pre-training task 1.")
     logging.debug("Arguments: %s" % (arguments,))
     logging.info("GPU available: %s" % torch.cuda.is_available())
-    logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
+    if torch.cuda.is_available():
+        logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
     hyperparameters = utils.enumerate_hyperparameters(HYPERPARAMETERS)
 
