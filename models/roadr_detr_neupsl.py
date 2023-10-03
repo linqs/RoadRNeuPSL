@@ -56,6 +56,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.batch_predictions = None
 
+        self.epoch_complete = False
+
         self.all_box_predictions = []
         self.all_class_predictions = []
         self.all_frame_indexes = []
@@ -80,7 +82,20 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {}
 
     def internal_fit(self, data, gradients, options={}):
-        return {}
+        self.optimizer.zero_grad(set_to_none=True)
+
+        loss = self._compute_loss()
+
+        total_loss = self.bce_weight * loss["bce_loss"] + self.giou_weight * loss["giou_loss"]
+        total_loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+
+        self.optimizer.step()
+
+        return {"total_loss": total_loss.item(),
+                "bce_loss": loss["bce_loss"].item(),
+                "giou_loss": loss["giou_loss"].item()}
 
     def internal_predict(self, data, options={}):
         self.set_model_application()
@@ -97,9 +112,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.format_batch_results(options=options)
 
-        self.current_batch = next(self.iterator, None)
-
-        if self.current_batch is None:
+        if self.epoch_complete:
             os.makedirs(OUT_DIR, exist_ok=True)
 
             create_task_1_output_format(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
@@ -108,9 +121,23 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
             save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
 
-            return BATCH_COMPLETE, {}
+        return {}
 
-        return BATCH_INCOMPLETE, {}
+    def internal_next_batch(self, options={}):
+        self.current_batch = next(self.iterator, None)
+        if self.current_batch is not None:
+            return
+
+        self.epoch_complete = True
+        self.iterator = iter(self.dataloader)
+        self.current_batch = next(self.iterator, None)
+
+
+    def internal_is_epoch_complete(self, options={}):
+        if self.epoch_complete:
+            self.epoch_complete = False
+            return {"is_epoch_complete": True}
+        return {"is_epoch_complete": False}
 
     def internal_save(self, options={}):
         return {}
@@ -160,3 +187,19 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.all_box_predictions.extend(box_predictions.tolist())
         self.all_class_predictions.extend(class_predictions.tolist())
+
+    def _compute_loss(self):
+        results = {}
+
+        frames, train_images, labels, boxes = self.current_batch
+
+        # Compute the matching between the predictions and the ground truth.
+        matching = hungarian_match(self.predictions["boxes"], boxes)
+
+        # Compute the classification loss using the matching.
+        results["bce_loss"] = binary_cross_entropy_with_logits(self.predictions["class_probabilities"], labels, matching)
+
+        # Compute the bounding box loss using the matching.
+        results["giou_loss"] = pairwise_generalized_box_iou(self.predictions["boxes"], boxes, matching)
+
+        return results
