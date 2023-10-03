@@ -87,7 +87,7 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
             if images_saved_for_video >= max_saved_images:
                 break
 
-            frame_index = dataset.video_id_frame_id_to_frame_index[(video_id, frame_id)]
+            frame_index = dataset.get_frame_index((video_id, frame_id))
             frame_ids, pixel_values, pixel_mask, ground_truth_labels, ground_truth_boxes = dataset[frame_index]
             load_frame_path = os.path.join(BASE_RGB_IMAGES_DIR, video_id, frame_id)
 

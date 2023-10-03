@@ -38,6 +38,7 @@ class RoadRDataset(Dataset):
         logging.info("Loaded database from {0}".format(self.data_path))
 
         self.frame_ids = []
+        self.frame_indexes = {}
         self.load_frame_ids()
         logging.info("Total frames counted in all videos: {0}".format(len(self.frame_ids)))
 
@@ -55,15 +56,16 @@ class RoadRDataset(Dataset):
                 if "annos" not in self.database[videoname]['frames'][str(frame_name)]:
                     continue
 
-                self.frame_ids.append([videoname, self.database[videoname]['frames'][str(frame_name)]['rgb_image_id']])
+                self.frame_indexes[(videoname, "{0:05d}.jpg".format(self.database[videoname]['frames'][str(frame_name)]['rgb_image_id']))] = len(self.frame_ids)
+                self.frame_ids.append([videoname, "{0:05d}.jpg".format(self.database[videoname]['frames'][str(frame_name)]['rgb_image_id'])])
                 num_video_frames += 1
 
-    def load_frame(self, index):
-        videoname, framename = self.frame_ids[index]
+    def load_frame(self, frame_index):
+        videoname, framename = self.frame_ids[frame_index]
 
-        image = self.processor(Image.open(os.path.join(BASE_RGB_IMAGES_DIR, videoname, "{0:05d}.jpg".format(framename))))
+        image = self.processor(Image.open(os.path.join(BASE_RGB_IMAGES_DIR, videoname, framename)))
 
-        frame = self.database[videoname]['frames'][str(framename)]
+        frame = self.database[videoname]['frames'][str(int(framename[:-4]))]
 
         frame_labels = torch.zeros(size=(NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.int8)
         frame_boxes = torch.zeros(size=(NUM_QUERIES, 4), dtype=torch.float32)
@@ -86,9 +88,15 @@ class RoadRDataset(Dataset):
     def image_width(self):
         return int(IMAGE_WIDTH * self.image_resize)
 
+    def get_frame_id(self, frame_index):
+        return self.frame_ids[frame_index]
+
+    def get_frame_index(self, frame_id):
+        return self.frame_indexes[frame_id]
+
     def __len__(self):
         return len(self.frame_ids)
 
-    def __getitem__(self, index):
-        pixel_values, pixel_mask, labels, boxes = self.load_frame(index)
-        return index, pixel_values, pixel_mask, labels, boxes
+    def __getitem__(self, frame_index):
+        pixel_values, pixel_mask, labels, boxes = self.load_frame(frame_index)
+        return frame_index, pixel_values, pixel_mask, labels, boxes

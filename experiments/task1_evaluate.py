@@ -11,7 +11,7 @@ import utils
 
 from torch.utils.data import DataLoader
 
-from data.roadr_dataset import RoadRDataset
+from data.stream_roadr_dataset import RoadRDataset
 from experiments.task1_pretrain import task_1_model
 from models.analysis import save_images_with_bounding_boxes
 from models.evaluation import count_violated_pairwise_constraints
@@ -51,7 +51,7 @@ def create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_di
     output_dict = {}
 
     for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
-        frame_id = dataset.get_frame_and_video_names(frame_index)
+        frame_id = dataset.get_frame_id(frame_index)
 
         if frame_id[0] not in output_dict:
             output_dict[frame_id[0]] = {}
@@ -88,7 +88,7 @@ def format_saved_predictions(predicitons, dataset):
             box_predictions.append([])
             class_predictions.append([])
 
-            frame_indexes.append(dataset.video_id_frame_id_to_frame_index[(video_index, frame_index)])
+            frame_indexes.append(dataset.get_frame_index((video_index, frame_index)))
             for frame_prediction in frame_predictions:
                 box_predictions[-1].append(frame_prediction["bbox"])
                 class_predictions[-1].append(frame_prediction["labels"])
@@ -207,7 +207,7 @@ def _load_args():
                         action="store", type=str, default="VALID",
                         help="Videos to evaluate on.", choices=["TRAIN", "VALID"])
     parser.add_argument("--batch-size", dest="batch_size",
-                        action="store", type=int, default=32,
+                        action="store", type=int, default=8,
                         help="Batch size.")
     parser.add_argument("--saved-model-path", dest="saved_model_path",
                         action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME),
