@@ -51,7 +51,6 @@ DEFAULT_PARAMETERS = {
 
 def task_1_model():
     return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
-                                                  revision="no_timm",
                                                   num_labels=NUM_CLASSES,
                                                   ignore_mismatched_sizes=True).to(utils.get_torch_device())
 
