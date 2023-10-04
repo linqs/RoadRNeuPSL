@@ -47,16 +47,13 @@ BATCH_COMPLETE = 1
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
         super().__init__()
-        self.application = None
-
+        self.model = None
         self.dataset = None
         self.dataloader = None
-        self.iterator = None
-        self.model = None
-
         self.batch_predictions = None
 
-        self.epoch_complete = False
+        self.iterator = None
+        self.current_batch = None
 
         self.all_box_predictions = []
         self.all_class_predictions = []
@@ -67,38 +64,72 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_init_model(self, application, options={}):
         logging.info("Initializing neural model for application: {0}".format(application))
-        self.application = application
+        self.model = task_1_model()
+        self.model.load_state_dict(torch.load(LOAD_MODEL_PATH))
 
         self.dataset = RoadRDataset(LABELED_VIDEOS, TRAIN_VALIDATION_DATA_PATH, float(options['image-resize']), max_frames=int(options['max-frames']))
         self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]), shuffle=False)
-        self.iterator = iter(self.dataloader)
-        self.current_batch = next(self.iterator, None)
-
-        self.model = task_1_model()
-        self.model.load_state_dict(torch.load(LOAD_MODEL_PATH))
 
         self.batch_predictions = torch.empty(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
         return {}
 
     def internal_fit(self, data, gradients, options={}):
+        self.set_model_application(options['learn'])
+
+        structured_gradients = float(options["alpha"]) * torch.tensor(gradients.astype(numpy.float32), dtype=torch.float32, device=utils.get_torch_device())
+
+        batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
+
         self.optimizer.zero_grad(set_to_none=True)
 
-        loss = self._compute_loss()
+        loss = self._compute_loss(batch)
 
-        total_loss = self.bce_weight * loss["bce_loss"] + self.giou_weight * loss["giou_loss"]
-        total_loss.backward()
+        loss.backward()
+        self.post_gradient_computation()
+        epoch_loss += loss.item()
 
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        return results
 
-        self.optimizer.step()
+    self._prepare_data(data, options=options)
 
-        return {"total_loss": total_loss.item(),
-                "bce_loss": loss["bce_loss"].item(),
-                "giou_loss": loss["giou_loss"].item()}
+
+
+    dino_loss = (1 - float(options["alpha"])) * (self._dino_loss(self._teacher_predictions_1, self._student_predictions_1)
+                                                      + self._dino_loss(self._teacher_predictions_2, self._student_predictions_2)) / 2.0
+
+    self._optimizer.zero_grad()
+
+    dino_loss.backward(retain_graph=True)
+    self._student_predictions_1.backward(structured_gradients, retain_graph=True)
+
+    torch.nn.utils.clip_grad_norm_(self._student_model.parameters(), 3.0)
+
+    self._optimizer.step()
+
+    # EMA updates for the teacher
+    with torch.no_grad():
+        for param_student, param_teacher in zip(self._student_model.parameters(), self._teacher_model.parameters()):
+            param_teacher.data.mul_(self._teacher_parameter_momentum).add_((1 - self._teacher_parameter_momentum) * param_student.detach().data)
+
+        self._teacher_center = (self._teacher_center_momentum * self._teacher_center
+                                + (1.0 - self._teacher_center_momentum) * torch.cat([self._teacher_predictions_1, self._teacher_predictions_2], dim=0).mean(dim=0))
+
+    # Compute the new training loss.
+    new_output = self._student_model(self._features)
+
+    loss = torch.nn.functional.cross_entropy(new_output, self._digit_labels).item()
+
+    results = {"training_classification_loss": loss,
+               "dino_loss": dino_loss.item(),
+               "teacher_center": self._teacher_center.cpu().detach().numpy().tolist(),
+               "struct gradient_norm_2": torch.norm(structured_gradients, 2).item(),
+               "struct gradient_norm_infty": torch.norm(structured_gradients, torch.inf).item()}
+
+    return results
 
     def internal_predict(self, data, options={}):
-        self.set_model_application()
+        self.set_model_application(options['learn'])
 
         frame_ids, pixel_values, pixel_mask, labels, boxes = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
@@ -108,11 +139,11 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return self.format_batch_predictions(batch_predictions["logits"].detach().cpu(), batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
-        self.set_model_application()
+        self.set_model_application(options['learn'])
 
         self.format_batch_results(options=options)
 
-        if self.epoch_complete:
+        if self.current_batch is None:
             os.makedirs(OUT_DIR, exist_ok=True)
 
             create_task_1_output_format(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
@@ -123,30 +154,29 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         return {}
 
+    def internal_epoch_start(self):
+        self.iterator = iter(self.dataloader)
+        self.next_batch()
+
+    def internal_epoch_end(self):
+        self.scheduler.step()
+
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
-        if self.current_batch is not None:
-            return
-
-        self.epoch_complete = True
-        self.iterator = iter(self.dataloader)
-        self.current_batch = next(self.iterator, None)
-
 
     def internal_is_epoch_complete(self, options={}):
-        if self.epoch_complete:
-            self.epoch_complete = False
+        if self.current_batch is None:
             return {"is_epoch_complete": True}
         return {"is_epoch_complete": False}
 
     def internal_save(self, options={}):
         return {}
 
-    def set_model_application(self):
-        if self.application == "inference":
-            self.model.eval()
-        else:
+    def set_model_application(self, application):
+        if application == "learn":
             self.model.train()
+        else:
+            self.model.eval()
 
     def format_batch_predictions(self, logits, boxes, options={}):
         self.batch_predictions = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
@@ -188,18 +218,23 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.all_box_predictions.extend(box_predictions.tolist())
         self.all_class_predictions.extend(class_predictions.tolist())
 
-    def _compute_loss(self):
-        results = {}
+    def _compute_loss(self, data, bce_weight: int = 1, giou_weight: int = 2, l2_weight: int = 1):
+        frame_ids, pixel_values, pixel_mask, labels, boxes = data
 
-        frames, train_images, labels, boxes = self.current_batch
+        # Compute the predictions for the provided batch.
+        self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
 
-        # Compute the matching between the predictions and the ground truth.
-        matching = hungarian_match(self.predictions["boxes"], boxes)
+        # Compute the training loss.
+        # For the training loss, we need to first compute the matching between the predictions and the ground truth.
+        matching = hungarian_match(self.batch_predictions["pred_boxes"], boxes)
 
         # Compute the classification loss using the matching.
-        results["bce_loss"] = binary_cross_entropy_with_logits(self.predictions["class_probabilities"], labels, matching)
+        bce_loss = binary_cross_entropy_with_logits(self.batch_predictions["logits"], labels, matching)
 
         # Compute the bounding box loss using the matching.
-        results["giou_loss"] = pairwise_generalized_box_iou(self.predictions["boxes"], boxes, matching)
+        giou_loss = pairwise_generalized_box_iou(self.batch_predictions["pred_boxes"], boxes, matching)
 
-        return results
+        # Compute the bounding box l2 loss using the matching.
+        l2_loss = pairwise_l2_loss(self.batch_predictions["pred_boxes"], boxes, matching)
+
+        return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss
