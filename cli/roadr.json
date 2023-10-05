@@ -9,7 +9,7 @@
     "admmreasoner.epsilonabs": 1.0e-8,
     "admmreasoner.epsilonrel": 1.0e-6,
     "admmreasoner.stepsize": 1.0,
-    "gradientdescent.numsteps": 50,
+    "gradientdescent.numsteps": 2,
     "gradientdescent.runfulliterations": true,
     "gradientdescent.stepsize": 1.0e-14,
     "gradientdescent.batchgenerator": "NeuralBatchGenerator"
@@ -19,9 +19,9 @@
       "admmreasoner.maxiterations": 1
     },
     "rules": [
-      "Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) .",
+      "1.0: Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
 
-      "Neural(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
+      "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}"
     ]
   },
   "infer": {
