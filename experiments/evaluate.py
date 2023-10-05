@@ -12,7 +12,7 @@ import utils
 from torch.utils.data import DataLoader
 
 from data.stream_roadr_dataset import RoadRDataset
-from experiments.task1_pretrain import task_1_model
+from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.evaluation import count_violated_pairwise_constraints
 from models.evaluation import filter_detections
@@ -34,9 +34,6 @@ from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import TRAINED_MODEL_DIR
 from utils import TRAINED_MODEL_FILENAME
 from utils import VIDEO_PARTITIONS
-
-
-TASK_NAME = "task1"
 
 
 def sigmoid_list_of_logits(logits):
@@ -107,14 +104,18 @@ def evaluate_dataset(dataset, arguments):
     dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False, num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
 
     logging.info("Building and loading pre-trained model.")
-    model = task_1_model()
+    model = build_model()
     model.load_state_dict(torch.load(arguments.saved_model_path))
 
     logging.info("Evaluating model.")
     trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
 
     frame_indexes, boxes, logits = trainer.evaluate(dataloader)
-    create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
+
+    if arguments.task == "task1":
+        create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
+    else:
+        raise NotImplementedError("Task 2 output not implemented.")
 
 
 def calculate_metrics(dataset, output_dir):
@@ -170,13 +171,14 @@ def main(arguments):
     utils.seed_everything(arguments.seed)
 
     logger.initLogging(arguments.log_level)
-    logging.info("Beginning evaluating task 1.")
+    logging.info("Beginning evaluating.")
     logging.debug("Arguments: %s" % (arguments,))
     logging.info("GPU available: %s" % torch.cuda.is_available())
-    logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
+    if torch.cuda.is_available():
+        logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
     logging.info("Loading evaluation videos: %s" % arguments.eval_videos.upper())
-    dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME][arguments.eval_videos.upper()], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
+    dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task][arguments.eval_videos.upper()], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
 
     logging.info("Evaluating dataset.")
     evaluate_dataset(dataset, arguments)
@@ -189,8 +191,9 @@ def main(arguments):
 
 
 def _load_args():
-    parser = argparse.ArgumentParser(description="Evaluating Task 1.")
+    parser = argparse.ArgumentParser(description="Evaluating Model.")
 
+    parser.add_argument("--task", dest="task", type=str, choices=["task1", "task2"])
     parser.add_argument("--seed", dest="seed",
                         action="store", type=int, default=SEED,
                         help="Seed for random number generator.")
@@ -210,10 +213,10 @@ def _load_args():
                         action="store", type=int, default=8,
                         help="Batch size.")
     parser.add_argument("--saved-model-path", dest="saved_model_path",
-                        action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME),
+                        action="store", type=str, default=None,
                         help="Path to model parameters to load.")
     parser.add_argument("--output-dir", dest="output_dir",
-                        action="store", type=str, default=os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "evaluation"),
+                        action="store", type=str, default=None,
                         help="Directory to save results to.")
     parser.add_argument("--save-images", dest="save_images",
                         action="store", type=str, default="BOXES_AND_LABELS",
@@ -223,6 +226,12 @@ def _load_args():
                         help="Maximum number of images saved per video.")
 
     arguments = parser.parse_args()
+
+    if arguments.saved_model_path is None:
+        arguments.saved_model_path = os.path.join(BASE_RESULTS_DIR, arguments.task, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
+
+    if arguments.output_dir is None:
+        arguments.output_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, TRAINED_MODEL_DIR, "evaluation")
 
     return arguments
 

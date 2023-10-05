@@ -15,9 +15,9 @@ import logger
 import utils
 
 from data.stream_roadr_dataset import RoadRDataset
-from experiments.task1_evaluate import create_task_1_output_format
-from experiments.task1_evaluate import calculate_metrics
-from experiments.task1_pretrain import task_1_model
+from experiments.evaluate import create_task_1_output_format
+from experiments.evaluate import calculate_metrics
+from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.hungarian_match import hungarian_match
 from models.losses import binary_cross_entropy_with_logits
@@ -76,7 +76,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         logging.info("Initializing neural model for application: {0}".format(application))
         self.application = application
 
-        self.model = task_1_model()
+        self.model = build_model()
 
         model_path = LOAD_PRE_TRAINED_MODEL_PATH
 
