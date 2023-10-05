@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 import utils
 
-from data.roadr_dataset import RoadRDataset
+from data.stream_roadr_dataset import RoadRDataset
 from experiments.task1_evaluate import create_task_1_output_format
 from experiments.task1_evaluate import calculate_metrics
 from experiments.task1_pretrain import task_1_model
@@ -123,7 +123,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         frame_ids, pixel_values, pixel_mask, labels, boxes = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
         self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-        if options["learn"] == "learn":
+        if not options["learn"]:
             self.all_frame_indexes.extend(frame_ids.cpu().tolist())
 
         return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.batch_predictions["pred_boxes"].detach().cpu(), options=options), {}

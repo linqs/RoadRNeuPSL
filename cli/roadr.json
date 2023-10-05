@@ -9,7 +9,7 @@
     "admmreasoner.epsilonabs": 1.0e-8,
     "admmreasoner.epsilonrel": 1.0e-6,
     "admmreasoner.stepsize": 1.0,
-    "gradientdescent.numsteps": 2,
+    "gradientdescent.numsteps": 50,
     "gradientdescent.runfulliterations": true,
     "gradientdescent.stepsize": 1.0e-14,
     "gradientdescent.batchgenerator": "NeuralBatchGenerator"
