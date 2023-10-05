@@ -27,6 +27,7 @@ from models.model_utils import save_model_state
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import LABEL_CONFIDENCE_THRESHOLD
+from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
@@ -39,7 +40,8 @@ from utils import VIDEO_PARTITIONS
 
 TASK_NAME = "task1"
 
-LOAD_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
+LOAD_PRE_TRAINED_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
+LOAD_NEUPSL_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_evaluation", TRAINED_MODEL_FILENAME)
 LOAD_PSL_LABELS_PATH = os.path.join(BASE_CLI_DIR, "inferred-predicates", "LABEL.txt")
 OUT_DIR = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_evaluation")
 
@@ -49,6 +51,8 @@ LABELED_VIDEOS = VIDEO_PARTITIONS[TASK_NAME]["VALID"]
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
         super().__init__()
+        self.application = None
+
         self.model = None
         self.dataset = None
         self.dataloader = None
@@ -70,14 +74,23 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_init(self, application, options={}):
         logging.info("Initializing neural model for application: {0}".format(application))
-        self.model = task_1_model()
-        self.model.load_state_dict(torch.load(LOAD_MODEL_PATH))
+        self.application = application
 
-        if application == "learning":
+        self.model = task_1_model()
+
+        model_path = LOAD_PRE_TRAINED_MODEL_PATH
+
+        if self.application == "learning":
+            self.model.load_state_dict(torch.load(model_path))
             self.dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]), max_frames=int(options["max-frames"]))
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=options["step-size"], gamma=float(options["gamma"]))
+            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(options["step-size"]), gamma=float(options["gamma"]))
         else:
+            if os.path.isfile(LOAD_NEUPSL_MODEL_PATH):
+                logging.info("Saved NeuPSL model found, loading: {0}".format(LOAD_NEUPSL_MODEL_PATH))
+                model_path = LOAD_NEUPSL_MODEL_PATH
+
+            self.model.load_state_dict(torch.load(model_path))
             self.dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]), max_frames=int(options["max-frames"]))
             self.optimizer = None
             self.scheduler = None
@@ -89,18 +102,18 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_fit(self, data, gradients, options={}):
         self.set_model_application(True)
 
-        structured_gradients = float(options["alpha"]) * torch.tensor(gradients.astype(numpy.float32), dtype=torch.float32, device=utils.get_torch_device())
-
         batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
+
+        structured_gradients = float(options["alpha"]) * self.format_batch_gradients(gradients, len(self.current_batch[1]))
 
         self.optimizer.zero_grad(set_to_none=True)
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
-        # TODO(Connor): Extract Gradients for Box Predictions
 
         loss, results = self._compute_loss(batch)
         loss.backward(retain_graph=True)
 
-        # self.post_gradient_computation()
+        self.post_gradient_computation()
+        self.optimizer.step()
 
         return results
 
@@ -116,10 +129,10 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
-        if options["learn"]:
+        if self.application == "learning":
             return {}
 
-        self.set_model_application(options["learn"])
+        self.set_model_application(False)
 
         self.format_batch_results(options=options)
 
@@ -152,6 +165,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {"is_epoch_complete": False}
 
     def internal_save(self, options={}):
+        os.makedirs(OUT_DIR, exist_ok=True)
         save_model_state(self.model, OUT_DIR, TRAINED_MODEL_FILENAME)
 
     def set_model_application(self, learning):
@@ -159,6 +173,22 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.model.train()
         else:
             self.model.eval()
+
+    def format_batch_gradients(self, gradients, batch_size, options={}):
+        formatted_gradients = torch.zeros(size=(batch_size, NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
+
+        batch_index = -1
+        for gradient_index in range(len(gradients)):
+            if gradient_index % NUM_NEUPSL_QUERIES == 0:
+                batch_index += 1
+                if batch_index >= batch_size:
+                    break
+
+            query_index = gradient_index % NUM_NEUPSL_QUERIES
+            for class_index in range(len(gradients[gradient_index][:-5])):
+                formatted_gradients[batch_index][query_index][class_index] = float(gradients[gradient_index][class_index])
+
+        return formatted_gradients.to(utils.get_torch_device())
 
     def format_batch_predictions(self, logits, boxes, options={}):
         self.batch_predictions_formatted = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
@@ -224,3 +254,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         }
 
         return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss, results
+
+    def post_gradient_computation(self):
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)

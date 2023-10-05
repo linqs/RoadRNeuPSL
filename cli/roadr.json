@@ -9,13 +9,15 @@
     "admmreasoner.epsilonabs": 1.0e-8,
     "admmreasoner.epsilonrel": 1.0e-6,
     "admmreasoner.stepsize": 1.0,
-    "admmreasoner.maxiterations": 2500,
-    "gradientdescent.numsteps": 5,
+    "gradientdescent.numsteps": 2,
     "gradientdescent.runfulliterations": true,
     "gradientdescent.stepsize": 1.0e-14,
     "gradientdescent.batchgenerator": "NeuralBatchGenerator"
   },
   "learn": {
+    "options": {
+      "admmreasoner.maxiterations": 1
+    },
     "rules": [
       "Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) .",
 
@@ -23,6 +25,9 @@
     ]
   },
   "infer": {
+    "options": {
+      "admmreasoner.maxiterations": 2500
+    },
     "rules": [
       "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
       "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
@@ -38,7 +43,7 @@
         "entity-data-map-path": "../data/psl-data/experiment::tube-size-4/entity-data-map.txt",
         "entity-argument-indexes": "0,1",
         "class-size": 46,
-        "batch-size": 4,
+        "batch-size": 2,
         "max-frames": 10,
         "image-resize": 0.4,
         "alpha": 0.5,
