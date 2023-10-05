@@ -19,6 +19,11 @@ from experiments.task1_evaluate import create_task_1_output_format
 from experiments.task1_evaluate import calculate_metrics
 from experiments.task1_pretrain import task_1_model
 from models.analysis import save_images_with_bounding_boxes
+from models.hungarian_match import hungarian_match
+from models.losses import binary_cross_entropy_with_logits
+from models.losses import pairwise_generalized_box_iou
+from models.losses import pairwise_l2_loss
+from models.model_utils import save_model_state
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import LABEL_CONFIDENCE_THRESHOLD
@@ -40,9 +45,6 @@ OUT_DIR = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_e
 
 LABELED_VIDEOS = VIDEO_PARTITIONS[TASK_NAME]["VALID"]
 
-BATCH_INCOMPLETE = 0
-BATCH_COMPLETE = 1
-
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
@@ -50,7 +52,11 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.model = None
         self.dataset = None
         self.dataloader = None
+        self.optimizer = None
+        self.scheduler = None
+
         self.batch_predictions = None
+        self.batch_predictions_formatted = None
 
         self.iterator = None
         self.current_batch = None
@@ -62,20 +68,26 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         utils.seed_everything(SEED)
         logger.initLogging(logging_level=logging.INFO)
 
-    def internal_init_model(self, application, options={}):
+    def internal_init(self, application, options={}):
         logging.info("Initializing neural model for application: {0}".format(application))
         self.model = task_1_model()
         self.model.load_state_dict(torch.load(LOAD_MODEL_PATH))
 
-        self.dataset = RoadRDataset(LABELED_VIDEOS, TRAIN_VALIDATION_DATA_PATH, float(options['image-resize']), max_frames=int(options['max-frames']))
-        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]), shuffle=False)
+        if application == "learning":
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]), max_frames=int(options["max-frames"]))
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
+            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=options["step-size"], gamma=float(options["gamma"]))
+        else:
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]), max_frames=int(options["max-frames"]))
+            self.optimizer = None
+            self.scheduler = None
 
-        self.batch_predictions = torch.empty(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
+        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]), shuffle=False)
 
         return {}
 
     def internal_fit(self, data, gradients, options={}):
-        self.set_model_application(options['learn'])
+        self.set_model_application(True)
 
         structured_gradients = float(options["alpha"]) * torch.tensor(gradients.astype(numpy.float32), dtype=torch.float32, device=utils.get_torch_device())
 
@@ -83,63 +95,29 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.optimizer.zero_grad(set_to_none=True)
 
-        loss = self._compute_loss(batch)
+        loss, results = self._compute_loss(batch)
+        loss.backward(structured_gradients, retain_graph=True)
 
-        loss.backward()
         self.post_gradient_computation()
-        epoch_loss += loss.item()
 
         return results
 
-    self._prepare_data(data, options=options)
-
-
-
-    dino_loss = (1 - float(options["alpha"])) * (self._dino_loss(self._teacher_predictions_1, self._student_predictions_1)
-                                                      + self._dino_loss(self._teacher_predictions_2, self._student_predictions_2)) / 2.0
-
-    self._optimizer.zero_grad()
-
-    dino_loss.backward(retain_graph=True)
-    self._student_predictions_1.backward(structured_gradients, retain_graph=True)
-
-    torch.nn.utils.clip_grad_norm_(self._student_model.parameters(), 3.0)
-
-    self._optimizer.step()
-
-    # EMA updates for the teacher
-    with torch.no_grad():
-        for param_student, param_teacher in zip(self._student_model.parameters(), self._teacher_model.parameters()):
-            param_teacher.data.mul_(self._teacher_parameter_momentum).add_((1 - self._teacher_parameter_momentum) * param_student.detach().data)
-
-        self._teacher_center = (self._teacher_center_momentum * self._teacher_center
-                                + (1.0 - self._teacher_center_momentum) * torch.cat([self._teacher_predictions_1, self._teacher_predictions_2], dim=0).mean(dim=0))
-
-    # Compute the new training loss.
-    new_output = self._student_model(self._features)
-
-    loss = torch.nn.functional.cross_entropy(new_output, self._digit_labels).item()
-
-    results = {"training_classification_loss": loss,
-               "dino_loss": dino_loss.item(),
-               "teacher_center": self._teacher_center.cpu().detach().numpy().tolist(),
-               "struct gradient_norm_2": torch.norm(structured_gradients, 2).item(),
-               "struct gradient_norm_infty": torch.norm(structured_gradients, torch.inf).item()}
-
-    return results
-
     def internal_predict(self, data, options={}):
-        self.set_model_application(options['learn'])
+        self.set_model_application(options["learn"])
 
         frame_ids, pixel_values, pixel_mask, labels, boxes = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
-        batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-        self.all_frame_indexes.extend(frame_ids.cpu().tolist())
+        self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+        if options["learn"] == "learn":
+            self.all_frame_indexes.extend(frame_ids.cpu().tolist())
 
-        return self.format_batch_predictions(batch_predictions["logits"].detach().cpu(), batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
+        return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
-        self.set_model_application(options['learn'])
+        if options["learn"]:
+            return {}
+
+        self.set_model_application(options["learn"])
 
         self.format_batch_results(options=options)
 
@@ -154,12 +132,14 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         return {}
 
-    def internal_epoch_start(self):
+    def internal_epoch_start(self, options={}):
         self.iterator = iter(self.dataloader)
         self.next_batch()
 
-    def internal_epoch_end(self):
-        self.scheduler.step()
+    def internal_epoch_end(self, options={}):
+        if self.scheduler is not None:
+            self.scheduler.step()
+            self.save()
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
@@ -170,25 +150,25 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {"is_epoch_complete": False}
 
     def internal_save(self, options={}):
-        return {}
+        save_model_state(self.model, OUT_DIR, TRAINED_MODEL_FILENAME)
 
-    def set_model_application(self, application):
-        if application == "learn":
+    def set_model_application(self, learning):
+        if learning:
             self.model.train()
         else:
             self.model.eval()
 
     def format_batch_predictions(self, logits, boxes, options={}):
-        self.batch_predictions = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
+        self.batch_predictions_formatted = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
         batch_predictions_sorted_indexes = torch.argsort(logits[:, :, -1], descending=True)
         batch_predictions = torch.cat((torch.sigmoid(logits), boxes), dim=-1)
 
         for batch_index in range(len(batch_predictions)):
             for box_index in range(NUM_NEUPSL_QUERIES):
-                self.batch_predictions[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
+                self.batch_predictions_formatted[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
 
-        return self.batch_predictions.flatten(start_dim=0, end_dim=1).cpu().detach().numpy().tolist()
+        return self.batch_predictions_formatted.flatten(start_dim=0, end_dim=1).cpu().detach().numpy().tolist()
 
     def format_batch_results(self, options={}):
         box_predictions = numpy.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, 4), dtype=numpy.float32)
@@ -206,9 +186,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                 class_index = predictions_index % int(options["class-size"])
 
                 if class_index > int(options["class-size"]) - 5:
-                    box_predictions[batch_index][query_index][class_index - (int(options["class-size"]) - 4)] = self.batch_predictions[batch_index][query_index][class_index]
+                    box_predictions[batch_index][query_index][class_index - (int(options["class-size"]) - 4)] = self.batch_predictions_formatted[batch_index][query_index][class_index]
                 elif class_index == int(options["class-size"]) - 5:
-                    class_predictions[batch_index][query_index][class_index] = self.batch_predictions[batch_index][query_index][class_index]
+                    class_predictions[batch_index][query_index][class_index] = self.batch_predictions_formatted[batch_index][query_index][class_index]
                 else:
                     class_predictions[batch_index][query_index][class_index] = float(line.strip().split("\t")[-1])
 
@@ -220,9 +200,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def _compute_loss(self, data, bce_weight: int = 1, giou_weight: int = 2, l2_weight: int = 1):
         frame_ids, pixel_values, pixel_mask, labels, boxes = data
-
-        # Compute the predictions for the provided batch.
-        self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.
@@ -237,4 +214,11 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         # Compute the bounding box l2 loss using the matching.
         l2_loss = pairwise_l2_loss(self.batch_predictions["pred_boxes"], boxes, matching)
 
-        return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss
+        results = {
+            "bce_loss": bce_loss,
+            "giou_loss": giou_loss,
+            "l2_loss": l2_loss,
+            "loss": bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss
+        }
+
+        return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss, results
