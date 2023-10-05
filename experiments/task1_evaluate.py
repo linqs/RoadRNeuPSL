@@ -104,7 +104,7 @@ def evaluate_dataset(dataset, arguments):
 
     os.makedirs(os.path.join(arguments.output_dir), exist_ok=True)
 
-    dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False, num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
 
     logging.info("Building and loading pre-trained model.")
     model = task_1_model()
