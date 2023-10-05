@@ -40,7 +40,7 @@
       "type": "DeepPredicate",
       "options": {
         "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
-        "entity-data-map-path": "../data/psl-data/experiment::tube-size-4/entity-data-map.txt",
+        "entity-data-map-path": "../data/psl-data/experiment::tube-size-2/entity-data-map.txt",
         "entity-argument-indexes": "0,1",
         "class-size": 46,
         "batch-size": 2,
@@ -54,50 +54,50 @@
       },
       "targets": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
         ]
       }
     },
     "Label/3": {
       "targets": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
         ]
       }
     },
     "HardCoOccurrence/2": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-4/hard-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-4/hard-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
         ]
       }
     },
     "BoundingBox/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
+          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
+          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
         ]
       }
     },
     "Agent/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
+          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
+          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
         ]
       }
     }

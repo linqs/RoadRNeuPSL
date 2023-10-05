@@ -130,7 +130,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_eval(self, data, options={}):
         if self.application == "learning":
-            return {}
+            return {'loss': 0.0}
 
         self.set_model_application(False)
 
@@ -145,7 +145,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
             save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
 
-        return {}
+        return {'loss': 0.0}
 
     def internal_epoch_start(self, options={}):
         self.iterator = iter(self.dataloader)
