@@ -32,25 +32,23 @@ HYPERPARAMETERS = {
     "learning-rate": [1.0e-4, 1.0e-5],
     "weight-decay": [1.0e-5],
     "batch-size": [2],
-    "dropout": [0.0, 0.1],
     "step-size": [100],
     "gamma": [1.0],
     "epochs": [100]
 }
 
 DEFAULT_PARAMETERS = {
-    "learning-rate": 1.0e-5,
+    "learning-rate": 1.0e-6,
     "weight-decay": 1.0e-5,
     "batch-size": 2,
-    "dropout": 0.0,
     "step-size": 500,
     "gamma": 1.0,
-    "epochs": 100
+    "epochs": 10
 }
 
 
 def task_1_model():
-    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
+    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50-dc5",
                                                   num_labels=NUM_CLASSES,
                                                   ignore_mismatched_sizes=True).to(utils.get_torch_device())
 

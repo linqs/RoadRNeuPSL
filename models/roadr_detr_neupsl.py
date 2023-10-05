@@ -94,11 +94,13 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
         self.optimizer.zero_grad(set_to_none=True)
+        self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
+        # TODO(Connor): Extract Gradients for Box Predictions
 
         loss, results = self._compute_loss(batch)
-        loss.backward(structured_gradients, retain_graph=True)
+        loss.backward(retain_graph=True)
 
-        self.post_gradient_computation()
+        # self.post_gradient_computation()
 
         return results
 
@@ -215,10 +217,10 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         l2_loss = pairwise_l2_loss(self.batch_predictions["pred_boxes"], boxes, matching)
 
         results = {
-            "bce_loss": bce_loss,
-            "giou_loss": giou_loss,
-            "l2_loss": l2_loss,
-            "loss": bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss
+            "bce_loss": bce_loss.item(),
+            "giou_loss": giou_loss.item(),
+            "l2_loss": l2_loss.item(),
+            "loss": (bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss).item()
         }
 
         return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss, results
