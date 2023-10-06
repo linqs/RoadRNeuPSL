@@ -25,10 +25,14 @@ PREDICTION_LOGITS_PKL_FILENAME = "prediction_logits.pkl"
 PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
 PREDICTION_LABELS_PKL_FILENAME = "prediction_labels.pkl"
 EVALUATION_METRICS_FILENAME = "evaluation_metrics.json"
-TRAINED_MODEL_DIR = "trained_model"
-TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
-TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
-TRAINING_SUMMARY_FILENAME = "training_summary.csv"
+NEURAL_TRAINED_MODEL_DIR = "trained_model"
+NEURAL_TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
+NEURAL_TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
+NEURAL_TRAINING_SUMMARY_FILENAME = "training_summary.csv"
+NEUPSL_TRAINED_MODEL_DIR = "neupsl_trained_model"
+NEUPSL_TRAINED_MODEL_FILENAME = "neupsl_trained_model_parameters.pt"
+NEUPSL_TRAINING_CONVERGENCE_FILENAME = "neupsl_training_convergence.csv"
+NEUPSL_TRAINING_SUMMARY_FILENAME = "neupsl_training_summary.csv"
 
 SEED = 4
 

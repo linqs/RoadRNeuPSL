@@ -34,8 +34,8 @@ from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NUM_SAVED_IMAGES
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
-from utils import TRAINED_MODEL_DIR
-from utils import TRAINED_MODEL_FILENAME
+from utils import NEURAL_TRAINED_MODEL_DIR
+from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import VIDEO_PARTITIONS
 
 
@@ -246,10 +246,10 @@ def _load_args():
     arguments = parser.parse_args()
 
     if arguments.saved_model_path is None:
-        arguments.saved_model_path = os.path.join(BASE_RESULTS_DIR, arguments.task, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
+        arguments.saved_model_path = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
 
     if arguments.output_dir is None:
-        arguments.output_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, TRAINED_MODEL_DIR, "evaluation")
+        arguments.output_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR, "evaluation")
 
     return arguments
 

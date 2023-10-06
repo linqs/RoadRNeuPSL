@@ -13,9 +13,9 @@ from torch.utils.data import DataLoader
 from typing import Tuple, List
 
 from utils import EVALUATION_SUMMARY_FILENAME
-from utils import TRAINED_MODEL_FILENAME
-from utils import TRAINING_CONVERGENCE_FILENAME
-from utils import TRAINING_SUMMARY_FILENAME
+from utils import NEURAL_TRAINED_MODEL_FILENAME
+from utils import NEURAL_TRAINING_CONVERGENCE_FILENAME
+from utils import NEURAL_TRAINING_SUMMARY_FILENAME
 
 
 class Trainer:
@@ -33,7 +33,7 @@ class Trainer:
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.
         :param n_epochs: (Optional) The total number of epochs to run training.
-        :param compute_period: (Optional) The number of epochs to run between each validation evaluation.
+        :param compute_period: (Optional) The number of epochs to run between each model checkpoint.
         """
         learning_convergence = ""
 
@@ -115,18 +115,18 @@ class Trainer:
                 epoch_l2_loss / dataset_size, epoch_logit_movement, epoch_box_movement)
 
             if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
-                with open(os.path.join(self.out_directory, TRAINING_CONVERGENCE_FILENAME), "w") as training_convergence_checkpoint_file:
+                with open(os.path.join(self.out_directory, NEURAL_TRAINING_CONVERGENCE_FILENAME), "w") as training_convergence_checkpoint_file:
                     training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Total Loss, BCE Loss, GIOU Loss, L2 Loss, Logit Movement, Box Movement\n")
                     training_convergence_checkpoint_file.write(learning_convergence)
 
-                save_model_state(self.model, self.out_directory, TRAINED_MODEL_FILENAME)
+                save_model_state(self.model, self.out_directory, NEURAL_TRAINED_MODEL_FILENAME)
 
         if torch.cuda.is_available():
             max_gpu_mem = torch.cuda.max_memory_allocated()
         else:
             max_gpu_mem = -1
 
-        with open(os.path.join(self.out_directory, TRAINING_SUMMARY_FILENAME), "w") as training_summary_file:
+        with open(os.path.join(self.out_directory, NEURAL_TRAINING_SUMMARY_FILENAME), "w") as training_summary_file:
             training_summary_file.write("Total Loss, BCE Loss, GIOU Loss, L2 Loss, Total Time(s), Max GPU memory (B)\n")
             training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:d}".format(
                 epoch_loss / dataset_size,

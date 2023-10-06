@@ -33,27 +33,22 @@ from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
-from utils import TRAINED_MODEL_DIR
-from utils import TRAINED_MODEL_FILENAME
+from utils import NEURAL_TRAINED_MODEL_DIR
+from utils import NEURAL_TRAINED_MODEL_FILENAME
+from utils import NEUPSL_TRAINED_MODEL_DIR
+from utils import NEUPSL_TRAINED_MODEL_FILENAME
 from utils import VIDEO_PARTITIONS
 
 
-TASK_NAME = "task1"
-
-OUT_DIR = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_evaluation")
-
-LOAD_PRE_TRAINED_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
 LOAD_PSL_LABELS_PATH = os.path.join(BASE_CLI_DIR, "inferred-predicates", "LABEL.txt")
-LOAD_NEUPSL_MODEL_PATH = os.path.join(OUT_DIR, TRAINED_MODEL_FILENAME)
-
-
-LABELED_VIDEOS = VIDEO_PARTITIONS[TASK_NAME]["VALID"]
 
 
 class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def __init__(self):
         super().__init__()
         self.application = None
+
+        self.out_dir = None
 
         self.model = None
         self.dataset = None
@@ -78,22 +73,31 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         logging.info("Initializing neural model for application: {0}".format(application))
         self.application = application
 
+        self.out_dir = os.path.join(BASE_RESULTS_DIR, options["task_name"], NEUPSL_TRAINED_MODEL_DIR, "neupsl_evaluation")
+
         self.model = build_model()
 
-        model_path = LOAD_PRE_TRAINED_MODEL_PATH
+        neural_trained_model_path = os.path.join(BASE_RESULTS_DIR, options["task_name"],
+                                                 NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
 
         if self.application == "learning":
-            self.model.load_state_dict(torch.load(model_path))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]), max_frames=int(options["max-frames"]))
+            self.model.load_state_dict(torch.load(neural_trained_model_path))
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task_name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
+                                        float(options["image-resize"]),
+                                        max_frames=int(options["max-frames"]))
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
             self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(options["step-size"]), gamma=float(options["gamma"]))
         else:
-            if os.path.isfile(LOAD_NEUPSL_MODEL_PATH):
-                logging.info("Saved NeuPSL model found, loading: {0}".format(LOAD_NEUPSL_MODEL_PATH))
-                model_path = LOAD_NEUPSL_MODEL_PATH
+            neupsl_trained_model_path = os.path.join(self.out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
+            if os.path.isfile(neupsl_trained_model_path):
+                logging.info("Saved NeuPSL model found, loading: {0}".format(neupsl_trained_model_path))
+                trained_model_path = neupsl_trained_model_path
+            else:
+                trained_model_path = neural_trained_model_path
 
-            self.model.load_state_dict(torch.load(model_path))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[TASK_NAME]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]), max_frames=int(options["max-frames"]))
+            self.model.load_state_dict(torch.load(trained_model_path))
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task_name"]]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
+                                        max_frames=int(options["max-frames"]))
             self.optimizer = None
             self.scheduler = None
 
@@ -148,10 +152,11 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.scheduler.step()
             self.save()
         else:
-            os.makedirs(OUT_DIR, exist_ok=True)
-            save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
-            calculate_metrics(self.dataset, OUT_DIR)
-            save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
+            os.makedirs(self.out_dir, exist_ok=True)
+            save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
+                                   output_dir=self.out_dir, from_logits=False)
+            calculate_metrics(self.dataset, self.out_dir)
+            save_images_with_bounding_boxes(self.dataset, self.out_dir, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
@@ -162,8 +167,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {"is_epoch_complete": False}
 
     def internal_save(self, options={}):
-        os.makedirs(OUT_DIR, exist_ok=True)
-        save_model_state(self.model, OUT_DIR, TRAINED_MODEL_FILENAME)
+        os.makedirs(self.out_dir, exist_ok=True)
+        save_model_state(self.model, self.out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
 
     def set_model_application(self, learning):
         if learning:

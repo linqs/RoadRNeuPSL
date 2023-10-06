@@ -19,9 +19,9 @@ from utils import BASE_RESULTS_DIR
 from utils import NUM_CLASSES
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
-from utils import TRAINED_MODEL_DIR
-from utils import TRAINED_MODEL_FILENAME
-from utils import TRAINING_SUMMARY_FILENAME
+from utils import NEURAL_TRAINED_MODEL_DIR
+from utils import NEURAL_TRAINED_MODEL_FILENAME
+from utils import NEURAL_TRAINING_SUMMARY_FILENAME
 from utils import VIDEO_PARTITIONS
 
 
@@ -51,9 +51,9 @@ def build_model():
 
 
 def run_setting(arguments, train_dataset, parameters, parameters_string):
-    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
+    if os.path.isfile(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
         logging.info("Skipping training for %s, already exists." % (parameters_string,))
-        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, TRAINING_SUMMARY_FILENAME))[1][0])
+        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
     os.makedirs(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string), exist_ok=True)
 
@@ -62,8 +62,8 @@ def run_setting(arguments, train_dataset, parameters, parameters_string):
     model = build_model()
 
     if arguments.resume_from_checkpoint:
-        logging.info("Loading model from checkpoint: %s" % (os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, TRAINED_MODEL_FILENAME),))
-        model.load_state_dict(torch.load(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, TRAINED_MODEL_FILENAME)))
+        logging.info("Loading model from checkpoint: %s" % (os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINED_MODEL_FILENAME),))
+        model.load_state_dict(torch.load(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINED_MODEL_FILENAME)))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
@@ -71,7 +71,7 @@ def run_setting(arguments, train_dataset, parameters, parameters_string):
     trainer = Trainer(model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
     trainer.train(train_dataloader, n_epochs=parameters["epochs"])
 
-    return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, TRAINING_SUMMARY_FILENAME))[1][0])
+    return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
 
 def main(arguments):
@@ -112,12 +112,12 @@ def main(arguments):
     logging.info("Loading Training Dataset")
     train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
 
-    loss = run_setting(arguments, train_dataset, parameter_setting, TRAINED_MODEL_DIR)
+    loss = run_setting(arguments, train_dataset, parameter_setting, NEURAL_TRAINED_MODEL_DIR)
     logging.info("Final loss: %f" % (loss,))
 
 
 def _load_args():
-    parser = argparse.ArgumentParser(description="RoadR Task 1 Pre-Training Network")
+    parser = argparse.ArgumentParser(description="RoadR Pre-Training Network")
 
     parser.add_argument("--task", dest="task", type=str, choices=["task1", "task2"])
     parser.add_argument("--seed", dest="seed",
