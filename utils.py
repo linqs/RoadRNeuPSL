@@ -12,6 +12,8 @@ BASE_CLI_DIR = os.path.join(THIS_DIR, "cli")
 BASE_DATA_DIR = os.path.join(THIS_DIR, "data")
 BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
 
+PSL_MODELS_DIR = os.path.join(THIS_DIR, "models", "psl")
+
 BASE_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "rgb-images")
 BASE_RGB_IMAGES_PROCESSED_DIR = os.path.join(BASE_DATA_DIR, "rgb-images-processed")
 

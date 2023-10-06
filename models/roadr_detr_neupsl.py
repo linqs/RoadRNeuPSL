@@ -74,16 +74,16 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         logging.info("Initializing neural model for application: {0}".format(application))
         self.application = application
 
-        self.out_dir = os.path.join(BASE_RESULTS_DIR, options["task_name"], NEUPSL_TRAINED_MODEL_DIR, "neupsl_evaluation")
+        self.out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR, "neupsl_evaluation")
 
         self.model = build_model()
 
-        neural_trained_model_path = os.path.join(BASE_RESULTS_DIR, options["task_name"],
+        neural_trained_model_path = os.path.join(BASE_RESULTS_DIR, options["task-name"],
                                                  NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
 
         if self.application == "learning":
             self.model.load_state_dict(torch.load(neural_trained_model_path))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task_name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
                                         float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]))
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
@@ -97,7 +97,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                 trained_model_path = neural_trained_model_path
 
             self.model.load_state_dict(torch.load(trained_model_path))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task_name"]]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]))
             self.optimizer = None
             self.scheduler = None
@@ -144,15 +144,19 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.format_batch_results(options=options)
 
+        return {'loss': 0.0}
+
     def internal_epoch_start(self, options={}):
         self.iterator = iter(self.dataloader)
         self.next_batch()
 
     def internal_epoch_end(self, options={}):
         if self.scheduler is not None:
+            # Learning
             self.scheduler.step()
             self.save()
         else:
+            # Inference
             os.makedirs(self.out_dir, exist_ok=True)
             save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
                                    output_dir=self.out_dir, from_logits=False)
@@ -161,7 +165,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
-        self.gpu_batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
+        if self.current_batch is not None:
+            self.gpu_batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
     def internal_is_epoch_complete(self, options={}):
         if self.current_batch is None:

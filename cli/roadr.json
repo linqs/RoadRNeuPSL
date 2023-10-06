@@ -1,105 +1,104 @@
 {
-  "options": {
-    "runtime.db.intids": true,
-    "runtime.log.level": "TRACE",
-    "runtime.learn": true,
-    "runtime.learn.method": "Energy",
-    "runtime.inference.deep.batching": true,
-    "admmreasoner.computeperiod": 100,
-    "admmreasoner.epsilonabs": 1.0e-8,
-    "admmreasoner.epsilonrel": 1.0e-6,
-    "admmreasoner.stepsize": 1.0,
-    "gradientdescent.numsteps": 50,
-    "gradientdescent.runfulliterations": true,
-    "gradientdescent.stepsize": 1.0e-14,
-    "gradientdescent.batchgenerator": "NeuralBatchGenerator"
-  },
-  "learn": {
     "options": {
-      "admmreasoner.maxiterations": 1
+        "runtime.log.level": "TRACE",
+        "runtime.db.intids": "true",
+        "runtime.learn": "true",
+        "runtime.learn.method": "Energy",
+        "runtime.inference.deep.batching": "true",
+        "runtime.inference.output.results": "true",
+        "runtime.inference.method": "GurobiInference",
+        "weightlearning.inference": "GurobiInference",
+        "inference.normalize": "false",
+        "gradientdescent.scalestepsize": "false",
+        "gradientdescent.trainingcomputeperiod": "5",
+        "gradientdescent.stopcomputeperiod": "5",
+        "gradientdescent.numsteps": "50",
+        "gradientdescent.runfulliterations": "true",
+        "gradientdescent.batchgenerator": "NeuralBatchGenerator",
+        "runtime.inference": "false"
     },
-    "rules": [
-      "1.0: Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
-
-      "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}"
-    ]
-  },
-  "infer": {
-    "options": {
-      "admmreasoner.maxiterations": 2500
-    },
-    "rules": [
-      "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
-      "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
-
-      "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
-    ]
-  },
-  "predicates": {
-    "Neural/3": {
-      "type": "DeepPredicate",
-      "options": {
-        "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
-        "entity-data-map-path": "../data/psl-data/experiment::tube-size-2/entity-data-map.txt",
-        "entity-argument-indexes": "0,1",
-        "class-size": 46,
-        "batch-size": 2,
-        "max-frames": 0,
-        "image-resize": 1.0,
-        "alpha": 0.5,
-        "learning-rate": 0.00001,
-        "weight-decay": 0.00001,
-        "step-size": 500,
-        "gamma": 0.1
-      },
-      "targets": {
-        "learn": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
-        ],
-        "infer": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+    "learn": {
+        "rules": [
+            "1.0: Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
+            "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}"
         ]
-      }
     },
-    "Label/3": {
-      "targets": {
-        "learn": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
-        ],
-        "infer": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+    "infer": {
+        "rules": [
+            "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
+            "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
+            "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
         ]
-      }
     },
-    "HardCoOccurrence/2": {
-      "observations": {
-        "learn": [
-          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
-        ],
-        "infer": [
-          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
-        ]
-      }
-    },
-    "BoundingBox/1": {
-      "observations": {
-        "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
-        ],
-        "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
-        ]
-      }
-    },
-    "Agent/1": {
-      "observations": {
-        "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
-        ],
-        "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
-        ]
-      }
+    "predicates": {
+        "Neural/3": {
+            "type": "DeepPredicate",
+            "options": {
+                "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
+                "entity-data-map-path": "../data/psl-data/experiment::tube-size-2/entity-data-map.txt",
+                "entity-argument-indexes": "0,1",
+                "task-name": "task2",
+                "class-size": 46,
+                "batch-size": 2,
+                "max-frames": 2,
+                "image-resize": 0.3,
+                "alpha": 0.5,
+                "learning-rate": 1e-05,
+                "weight-decay": 1e-05,
+                "step-size": 500,
+                "gamma": 0.1
+            },
+            "targets": {
+                "learn": [
+                    "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+                ],
+                "infer": [
+                    "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+                ]
+            }
+        },
+        "Label/3": {
+            "options": {
+                "integer": "false"
+            },
+            "targets": {
+                "learn": [
+                    "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+                ],
+                "infer": [
+                    "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+                ]
+            }
+        },
+        "HardCoOccurrence/2": {
+            "observations": {
+                "learn": [
+                    "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
+                ],
+                "infer": [
+                    "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
+                ]
+            }
+        },
+        "BoundingBox/1": {
+            "observations": {
+                "learn": [
+                    "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+                ],
+                "infer": [
+                    "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+                ]
+            }
+        },
+        "Agent/1": {
+            "observations": {
+                "learn": [
+                    "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+                ],
+                "infer": [
+                    "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+                ]
+            }
+        }
     }
-  }
 }
