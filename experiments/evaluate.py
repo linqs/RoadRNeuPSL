@@ -228,7 +228,7 @@ def _load_args():
                         action="store", type=str, default="VALID",
                         help="Videos to evaluate on.", choices=["TRAIN", "VALID"])
     parser.add_argument("--batch-size", dest="batch_size",
-                        action="store", type=int, default=8,
+                        action="store", type=int, default=4,
                         help="Batch size.")
     parser.add_argument("--saved-model-path", dest="saved_model_path",
                         action="store", type=str, default=None,

@@ -22,7 +22,7 @@ from models.analysis import save_images_with_bounding_boxes
 from models.hungarian_match import hungarian_match
 from models.losses import binary_cross_entropy_with_logits
 from models.losses import pairwise_generalized_box_iou
-from models.losses import pairwise_l2_loss
+from models.losses import pairwise_l1_loss
 from models.model_utils import save_model_state
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
@@ -239,7 +239,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.all_box_predictions.extend(box_predictions.tolist())
         self.all_class_predictions.extend(class_predictions.tolist())
 
-    def _compute_loss(self, data, bce_weight: int = 1, giou_weight: int = 2, l2_weight: int = 1):
+    def _compute_loss(self, data, bce_weight: int = 1, giou_weight: int = 5, l1_weight: int = 2):
         frame_ids, pixel_values, pixel_mask, labels, boxes = data
 
         # Compute the training loss.
@@ -253,16 +253,16 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         giou_loss = pairwise_generalized_box_iou(self.batch_predictions["pred_boxes"], boxes, matching)
 
         # Compute the bounding box l2 loss using the matching.
-        l2_loss = pairwise_l2_loss(self.batch_predictions["pred_boxes"], boxes, matching)
+        l1_loss = pairwise_l1_loss(self.batch_predictions["pred_boxes"], boxes, matching)
 
         results = {
             "bce_loss": bce_loss.item(),
             "giou_loss": giou_loss.item(),
-            "l2_loss": l2_loss.item(),
-            "loss": (bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss).item()
+            "l1_loss": l1_loss.item(),
+            "loss": (bce_weight * bce_loss + giou_weight * giou_loss + l1_weight * l1_loss).item()
         }
 
-        return bce_weight * bce_loss + giou_weight * giou_loss + l2_weight * l2_loss, results
+        return bce_weight * bce_loss + giou_weight * giou_loss + l1_weight * l1_loss, results
 
     def post_gradient_computation(self):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
