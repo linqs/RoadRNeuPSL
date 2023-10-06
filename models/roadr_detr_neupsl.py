@@ -98,7 +98,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.optimizer = None
             self.scheduler = None
 
-        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]), shuffle=False)
+        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]),
+                                     shuffle=False, num_workers=int(os.cpu_count()) - 2,
+                                     prefetch_factor=4, persistent_workers=True)
 
         return {}
 
