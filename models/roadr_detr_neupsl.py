@@ -15,7 +15,7 @@ import logger
 import utils
 
 from data.stream_roadr_dataset import RoadRDataset
-from experiments.evaluate import create_task_1_output_format
+from experiments.evaluate import save_logits_and_labels
 from experiments.evaluate import calculate_metrics
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
@@ -139,7 +139,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         if self.current_batch is None:
             os.makedirs(OUT_DIR, exist_ok=True)
 
-            create_task_1_output_format(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
+            save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
 
             calculate_metrics(self.dataset, OUT_DIR)
 

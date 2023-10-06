@@ -24,8 +24,10 @@ from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
 from utils import CONSTRAINTS_PATH
 from utils import EVALUATION_METRICS_FILENAME
-from utils import EVALUATION_PREDICTION_JSON_FILENAME
-from utils import EVALUATION_PREDICTION_PKL_FILENAME
+from utils import PREDICTION_LOGITS_JSON_FILENAME
+from utils import PREDICTION_LOGITS_PKL_FILENAME
+from utils import PREDICTION_LABELS_JSON_FILENAME
+from utils import PREDICTION_LABELS_PKL_FILENAME
 from utils import IOU_THRESHOLD
 from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NUM_SAVED_IMAGES
@@ -44,18 +46,22 @@ def sort_by_confidence(frame_logits, frame_boxes):
     return zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
 
 
-def create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_dir=None, from_logits=True):
-    output_dict = {}
+def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
+    # TODO(Charles): rescale bounding boxes to original image size.
+    logits_output_dict = {}
+    labels_output_dict = {}
 
     for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
         frame_id = dataset.get_frame_id(frame_index)
 
-        if frame_id[0] not in output_dict:
-            output_dict[frame_id[0]] = {}
+        if frame_id[0] not in logits_output_dict:
+            logits_output_dict[frame_id[0]] = {}
+            labels_output_dict[frame_id[0]] = {}
 
         frame_logits, frame_boxes = sort_by_confidence(frame_logits, frame_boxes)
 
-        output_dict[frame_id[0]][frame_id[1]] = []
+        logits_output_dict[frame_id[0]][frame_id[1]] = []
+        labels_output_dict[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, frame_boxes):
             if from_logits:
                 prediction = sigmoid_list_of_logits(logits)
@@ -63,24 +69,36 @@ def create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_di
                 prediction = logits
 
             if prediction[-1] >= BOX_CONFIDENCE_THRESHOLD:
-                output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
+                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
+
+                predicted_labels = []
+                for i in range(len(prediction) - 1):
+                    if prediction[i] > LABEL_CONFIDENCE_THRESHOLD:
+                        predicted_labels.append(i)
+
+                labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
             else:
-                output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
+                # TODO(Charles): Should we even include boxes with low confidence in submission?
+                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
+                labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": [], "bbox": box})
 
-    if output_dir is not None:
-        logging.info("Saving pkl predictions to %s" % os.path.join(output_dir, EVALUATION_PREDICTION_PKL_FILENAME))
-        utils.write_pkl_file(os.path.join(output_dir, EVALUATION_PREDICTION_PKL_FILENAME), output_dict)
+    logging.info("Saving pkl prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME))
+    utils.write_pkl_file(os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME), logits_output_dict)
 
-        logging.info("Saving json predictions to %s" % os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
-        utils.write_json_file(os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME), output_dict)
+    logging.info("Saving json prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
+    utils.write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME), logits_output_dict)
 
-    return output_dict
+    logging.info("Saving pkl prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME))
+    utils.write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), labels_output_dict)
+
+    logging.info("Saving json prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
+    utils.write_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME), labels_output_dict)
 
 
-def format_saved_predictions(predicitons, dataset):
+def format_saved_predictions(predictions, dataset):
     frame_indexes, box_predictions, class_predictions = [], [], []
 
-    for video_index, video_predictions in predicitons.items():
+    for video_index, video_predictions in predictions.items():
         for frame_index, frame_predictions in video_predictions.items():
             box_predictions.append([])
             class_predictions.append([])
@@ -94,14 +112,16 @@ def format_saved_predictions(predicitons, dataset):
 
 
 def evaluate_dataset(dataset, arguments):
-    if os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_JSON_FILENAME)) and \
-            os.path.isfile(os.path.join(arguments.output_dir, EVALUATION_PREDICTION_PKL_FILENAME)):
+    if os.path.isfile(os.path.join(arguments.output_dir, PREDICTION_LABELS_JSON_FILENAME)) and \
+            os.path.isfile(os.path.join(arguments.output_dir, PREDICTION_LABELS_PKL_FILENAME)):
         logging.info("Skipping evaluation for %s, already exists." % (arguments.output_dir,))
         return
 
     os.makedirs(os.path.join(arguments.output_dir), exist_ok=True)
 
-    dataloader = DataLoader(dataset, batch_size=arguments.batch_size, shuffle=False, num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
+    dataloader = DataLoader(dataset, batch_size=arguments.batch_size,
+                            shuffle=False, num_workers=int(os.cpu_count()) - 2,
+                            prefetch_factor=4, persistent_workers=True)
 
     logging.info("Building and loading pre-trained model.")
     model = build_model()
@@ -112,10 +132,7 @@ def evaluate_dataset(dataset, arguments):
 
     frame_indexes, boxes, logits = trainer.evaluate(dataloader)
 
-    if arguments.task == "task1":
-        create_task_1_output_format(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
-    else:
-        raise NotImplementedError("Task 2 output not implemented.")
+    save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
 
 
 def calculate_metrics(dataset, output_dir):
@@ -127,7 +144,7 @@ def calculate_metrics(dataset, output_dir):
         return
 
     logging.info("Loading predictions.")
-    predictions = utils.load_json_file(os.path.join(output_dir, EVALUATION_PREDICTION_JSON_FILENAME))
+    predictions = utils.load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
     frame_indexes, class_predictions, box_predictions = format_saved_predictions(predictions, dataset)
 
     logging.info("Calculating metrics.")

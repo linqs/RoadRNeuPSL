@@ -20,8 +20,10 @@ CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrenc
 
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
 EVALUATION_SUMMARY_FILENAME = "evaluation_summary.json"
-EVALUATION_PREDICTION_JSON_FILENAME = "evaluation_predictions.json"
-EVALUATION_PREDICTION_PKL_FILENAME = "evaluation_predictions.pkl"
+PREDICTION_LOGITS_JSON_FILENAME = "prediction_logits.json"
+PREDICTION_LOGITS_PKL_FILENAME = "prediction_logits.pkl"
+PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
+PREDICTION_LABELS_PKL_FILENAME = "prediction_labels.pkl"
 EVALUATION_METRICS_FILENAME = "evaluation_metrics.json"
 TRAINED_MODEL_DIR = "trained_model"
 TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
