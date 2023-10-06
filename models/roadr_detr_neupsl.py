@@ -40,10 +40,12 @@ from utils import VIDEO_PARTITIONS
 
 TASK_NAME = "task1"
 
-LOAD_PRE_TRAINED_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
-LOAD_NEUPSL_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_evaluation", TRAINED_MODEL_FILENAME)
-LOAD_PSL_LABELS_PATH = os.path.join(BASE_CLI_DIR, "inferred-predicates", "LABEL.txt")
 OUT_DIR = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, "neuspl_evaluation")
+
+LOAD_PRE_TRAINED_MODEL_PATH = os.path.join(BASE_RESULTS_DIR, TASK_NAME, TRAINED_MODEL_DIR, TRAINED_MODEL_FILENAME)
+LOAD_PSL_LABELS_PATH = os.path.join(BASE_CLI_DIR, "inferred-predicates", "LABEL.txt")
+LOAD_NEUPSL_MODEL_PATH = os.path.join(OUT_DIR, TRAINED_MODEL_FILENAME)
+
 
 LABELED_VIDEOS = VIDEO_PARTITIONS[TASK_NAME]["VALID"]
 
@@ -110,6 +112,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
 
         loss, results = self._compute_loss(batch)
+        loss = (1 - float(options["alpha"])) * loss
         loss.backward(retain_graph=True)
 
         self.post_gradient_computation()
@@ -136,17 +139,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.format_batch_results(options=options)
 
-        if self.current_batch is None:
-            os.makedirs(OUT_DIR, exist_ok=True)
-
-            save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
-
-            calculate_metrics(self.dataset, OUT_DIR)
-
-            save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
-
-        return {'loss': 0.0}
-
     def internal_epoch_start(self, options={}):
         self.iterator = iter(self.dataloader)
         self.next_batch()
@@ -155,6 +147,11 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         if self.scheduler is not None:
             self.scheduler.step()
             self.save()
+        else:
+            os.makedirs(OUT_DIR, exist_ok=True)
+            save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions, output_dir=OUT_DIR, from_logits=False)
+            calculate_metrics(self.dataset, OUT_DIR)
+            save_images_with_bounding_boxes(self.dataset, OUT_DIR, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
