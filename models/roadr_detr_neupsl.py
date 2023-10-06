@@ -66,6 +66,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.iterator = None
         self.current_batch = None
+        self.gpu_batch = None
 
         self.all_box_predictions = []
         self.all_class_predictions = []
@@ -104,14 +105,12 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_fit(self, data, gradients, options={}):
         self.set_model_application(True)
 
-        batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
-
         structured_gradients = float(options["alpha"]) * self.format_batch_gradients(gradients, len(self.current_batch[1]))
 
         self.optimizer.zero_grad(set_to_none=True)
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
 
-        loss, results = self._compute_loss(batch)
+        loss, results = self._compute_loss(self.gpu_batch)
         loss = (1 - float(options["alpha"])) * loss
         loss.backward(retain_graph=True)
 
@@ -123,7 +122,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_predict(self, data, options={}):
         self.set_model_application(options["learn"])
 
-        frame_ids, pixel_values, pixel_mask, labels, boxes = [b.to(utils.get_torch_device()) for b in self.current_batch]
+        frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
 
         self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
         if not options["learn"]:
@@ -155,6 +154,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
+        self.gpu_batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
 
     def internal_is_epoch_complete(self, options={}):
         if self.current_batch is None:
