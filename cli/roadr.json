@@ -1,7 +1,7 @@
 {
   "options": {
     "runtime.db.intids": true,
-    "runtime.log.level": "INFO",
+    "runtime.log.level": "TRACE",
     "runtime.learn": true,
     "runtime.learn.method": "Energy",
     "runtime.inference.deep.batching": true,
@@ -44,8 +44,8 @@
         "entity-argument-indexes": "0,1",
         "class-size": 46,
         "batch-size": 2,
-        "max-frames": 10,
-        "image-resize": 0.4,
+        "max-frames": 0,
+        "image-resize": 1.0,
         "alpha": 0.5,
         "learning-rate": 0.00001,
         "weight-decay": 0.00001,
