@@ -1,5 +1,6 @@
 import torch
 
+from models.analysis import ratio_to_pixel_coordinates
 from torchmetrics.detection import MeanAveragePrecision
 from torchvision.ops import nms
 
@@ -74,9 +75,13 @@ def load_ground_truth_for_detections(dataset, indexes, num_classes=NUM_CLASSES):
                 continue
 
             class_frame_truth_boxes = frame_truth_boxes[mask_class_frame_truth_labels]
-            class_frame_frame_labels = torch.Tensor([int(class_index)] * len(class_frame_truth_boxes)).type(torch.int64)
+            scaled_class_frame_truth_boxes = ratio_to_pixel_coordinates(
+                class_frame_truth_boxes, dataset.image_height() / dataset.image_resize,
+                dataset.image_width() / dataset.image_resize)
 
-            ground_truth.append({'boxes': class_frame_truth_boxes, 'labels': class_frame_frame_labels})
+            class_frame_frame_labels = torch.Tensor([int(class_index)] * len(scaled_class_frame_truth_boxes)).type(torch.int64)
+
+            ground_truth.append({'boxes': scaled_class_frame_truth_boxes, 'labels': class_frame_frame_labels})
 
     return ground_truth
 

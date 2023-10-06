@@ -20,7 +20,7 @@ GROUND_TRUTH_BORDER_COLOR = (1, 0, 0)
 DETECTED_BORDER_COLOR = (0, 1, 0)
 
 
-def _ratio_to_pixel_coordinates(bounding_boxes, height, width):
+def ratio_to_pixel_coordinates(bounding_boxes, height, width):
     if len(bounding_boxes) == 0:
         return bounding_boxes
 
@@ -91,10 +91,10 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
             frame_ids, pixel_values, pixel_mask, ground_truth_labels, ground_truth_boxes = dataset[frame_index]
             load_frame_path = os.path.join(BASE_RGB_IMAGES_DIR, video_id, frame_id)
 
-            ground_truth_boxes = _ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+            ground_truth_boxes = ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
 
             detected_boxes = torch.Tensor([prediction["bbox"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
-            detected_boxes = _ratio_to_pixel_coordinates(detected_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+            detected_boxes = ratio_to_pixel_coordinates(detected_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
             detected_labels = torch.Tensor([prediction["labels"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
             detected_labels = detected_labels.gt(labels_confidence_threshold).float()
 

@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from data.stream_roadr_dataset import RoadRDataset
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
+from models.analysis import ratio_to_pixel_coordinates
 from models.evaluation import count_violated_pairwise_constraints
 from models.evaluation import filter_detections
 from models.evaluation import format_pairwise_constraints
@@ -47,7 +48,6 @@ def sort_by_confidence(frame_logits, frame_boxes):
 
 
 def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
-    # TODO(Charles): rescale bounding boxes to original image size.
     logits_output_dict = {}
     labels_output_dict = {}
 
@@ -59,10 +59,11 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
             labels_output_dict[frame_id[0]] = {}
 
         frame_logits, frame_boxes = sort_by_confidence(frame_logits, frame_boxes)
+        scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize).tolist()
 
         logits_output_dict[frame_id[0]][frame_id[1]] = []
         labels_output_dict[frame_id[0]][frame_id[1]] = []
-        for logits, box in zip(frame_logits, frame_boxes):
+        for logits, box in zip(frame_logits, scaled_frame_boxes):
             if from_logits:
                 prediction = sigmoid_list_of_logits(logits)
             else:
@@ -78,7 +79,7 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
 
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
             else:
-                # TODO(Charles): Should we even include boxes with low confidence in submission?
+                # TODO(Charles): Should we include boxes with low confidence in submission?
                 logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": [], "bbox": box})
 
