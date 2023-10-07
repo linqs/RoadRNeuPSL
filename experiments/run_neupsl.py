@@ -77,7 +77,7 @@ def run_neupsl(arguments):
         psl_json["options"]["runtime.inference"] = "true"
 
         if arguments.task == "task2":
-            psl_json["predicates"]["Label/3"]["options"]["integer"] = "true"
+            psl_json["predicates"]["Label/3"]["options"]["Integer"] = "true"
 
         write_neupsl_json(psl_json)
 
