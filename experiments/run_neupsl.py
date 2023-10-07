@@ -93,6 +93,8 @@ def write_neupsl_json(psl_json):
     # Write the options the json file.
     with open(os.path.join(BASE_CLI_DIR, "roadr.json"), "w") as file:
         json.dump(psl_json, file, indent=4)
+
+
 def main(arguments):
     logger.initLogging(arguments.log_level)
 
