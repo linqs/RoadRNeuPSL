@@ -55,38 +55,40 @@ def run_neupsl(arguments):
     psl_json["predicates"]["Neural/3"]["options"]["image-resize"] = arguments.image_resize
     psl_json["predicates"]["Neural/3"]["options"]["max-frames"] = arguments.max_frames
 
-    # Run NeuPSL training.
-    psl_json["options"]["runtime.learn"] = "true"
-    psl_json["options"]["runtime.inference"] = "false"
+    if not arguments.no_learning:
+        # Run NeuPSL training.
+        psl_json["options"]["runtime.learn"] = "true"
+        psl_json["options"]["runtime.inference"] = "false"
 
-    write_neupsl_json(psl_json)
+        write_neupsl_json(psl_json)
 
-    print("Running NeuPSL training for: {}.".format(out_dir))
-    exit_code = os.system("cd {} && ./run.sh > {}/learning_out.txt 2> {}/learning_out.err".format(BASE_CLI_DIR, out_dir, out_dir))
+        print("Running NeuPSL learning for: {}.".format(out_dir))
+        exit_code = os.system("cd {} && ./run.sh > {}/learning_out.txt 2> {}/learning_out.err".format(BASE_CLI_DIR, out_dir, out_dir))
 
-    if exit_code != 0:
-        print("Experiment failed: {}.".format(out_dir))
-        exit()
+        if exit_code != 0:
+            print("Experiment failed: {}.".format(out_dir))
+            exit()
 
-    # Run NeuPSL inference.
-    psl_json["options"]["runtime.learn"] = "false"
-    psl_json["options"]["runtime.inference"] = "true"
+    if not arguments.no_inference:
+        # Run NeuPSL inference.
+        psl_json["options"]["runtime.learn"] = "false"
+        psl_json["options"]["runtime.inference"] = "true"
 
-    if arguments.task == "task2":
-        psl_json["predicates"]["Label/3"]["options"]["integer"] = "true"
+        if arguments.task == "task2":
+            psl_json["predicates"]["Label/3"]["options"]["integer"] = "true"
 
-    write_neupsl_json(psl_json)
+        write_neupsl_json(psl_json)
 
-    print("Running NeuPSL inference for: {}.".format(out_dir))
-    exit_code = os.system("cd {} && ./run.sh > {}/inference_out.txt 2> {}/inference_out.err".format(BASE_CLI_DIR, out_dir, out_dir))
+        print("Running NeuPSL inference for: {}.".format(out_dir))
+        exit_code = os.system("cd {} && ./run.sh > {}/inference_out.txt 2> {}/inference_out.err".format(BASE_CLI_DIR, out_dir, out_dir))
 
-    if exit_code != 0:
-        print("Experiment failed: {}.".format(out_dir))
-        exit()
+        if exit_code != 0:
+            print("Experiment failed: {}.".format(out_dir))
+            exit()
 
-    # Save the output and json file.
-    os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), out_dir))
-    os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), out_dir))
+        # Save the output and json file.
+        os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), out_dir))
+        os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), out_dir))
 
 
 def write_neupsl_json(psl_json):
@@ -98,7 +100,7 @@ def write_neupsl_json(psl_json):
 def main(arguments):
     logger.initLogging(arguments.log_level)
 
-    logging.info("Beginning NeuPSL training.")
+    logging.info("NeuPSL.")
     logging.debug("Arguments: %s" % (arguments,))
     logging.info("GPU available: %s" % torch.cuda.is_available())
     if torch.cuda.is_available():
@@ -124,8 +126,16 @@ def _load_args():
     parser.add_argument("--max-frames", dest="max_frames",
                         action="store", type=int, default=0,
                         help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
+    parser.add_argument("--no-learning", dest="no_learning",
+                        action="store_true", default=False,
+                        help="Turn off learning step.")
+    parser.add_argument("--no-inference", dest="no_inference",
+                        action="store_true", default=False,
+                        help="Turn off inference step.")
 
     arguments = parser.parse_args()
+
+    print("Arguments: %s" % (arguments,))
 
     return arguments
 
