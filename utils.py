@@ -15,6 +15,7 @@ BASE_RESULTS_DIR = os.path.join(THIS_DIR, "results")
 PSL_MODELS_DIR = os.path.join(THIS_DIR, "models", "psl")
 
 BASE_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "rgb-images")
+BASE_TEST_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "test-rgb-images")
 BASE_RGB_IMAGES_PROCESSED_DIR = os.path.join(BASE_DATA_DIR, "rgb-images-processed")
 
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")

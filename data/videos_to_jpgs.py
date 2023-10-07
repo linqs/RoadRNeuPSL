@@ -9,19 +9,21 @@ import logger
 
 from utils import BASE_DATA_DIR
 from utils import BASE_RGB_IMAGES_DIR
+from utils import BASE_TEST_RGB_IMAGES_DIR
 
 VIDEOS_DIR = os.path.join(BASE_DATA_DIR, "videos")
+TEST_VIDEOS_DIR = os.path.join(BASE_DATA_DIR, "test_videos")
 
 
-def video_to_jpgs(video_path):
+def video_to_jpgs(video_path, rgb_images_dir):
     video_filename = os.path.basename(video_path)[:-4]
-    os.makedirs(os.path.join(BASE_RGB_IMAGES_DIR, video_filename), exist_ok=True)
+    os.makedirs(os.path.join(rgb_images_dir, video_filename), exist_ok=True)
 
-    if len(os.listdir(os.path.join(BASE_RGB_IMAGES_DIR, video_filename))) > 0:
+    if len(os.listdir(os.path.join(rgb_images_dir, video_filename))) > 0:
         logging.info("Video {0} already processed: Skipping".format(video_filename))
         return
 
-    command = 'ffmpeg  -i {} -q:v 1 {}/%05d.jpg'.format(video_path, os.path.join(BASE_RGB_IMAGES_DIR, video_filename))
+    command = 'ffmpeg  -i {} -q:v 1 {}/%05d.jpg'.format(video_path, os.path.join(rgb_images_dir, video_filename))
 
     logging.info("Running command: {0}".format(command))
     os.system(command)
@@ -30,12 +32,21 @@ def video_to_jpgs(video_path):
 def main(arguments):
     logger.initLogging(arguments.log_level)
 
+    logging.info("Processing training videos")
     for video_filename in os.listdir(VIDEOS_DIR):
         if not video_filename.endswith(".mp4"):
             continue
 
         logging.info("Processing video {0}".format(video_filename))
-        video_to_jpgs(os.path.join(VIDEOS_DIR, video_filename))
+        video_to_jpgs(os.path.join(VIDEOS_DIR, video_filename), BASE_RGB_IMAGES_DIR)
+
+    logging.info("Processing test videos")
+    for video_filename in os.listdir(TEST_VIDEOS_DIR):
+        if not video_filename.endswith(".mp4"):
+            continue
+
+        logging.info("Processing video {0}".format(video_filename))
+        video_to_jpgs(os.path.join(TEST_VIDEOS_DIR, video_filename), BASE_TEST_RGB_IMAGES_DIR)
 
 
 def _load_args():
