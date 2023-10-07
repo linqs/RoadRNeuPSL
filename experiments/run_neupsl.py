@@ -49,6 +49,8 @@ def run_neupsl(arguments):
     psl_json.update({"options": {**original_options,
                                      **STANDARD_EXPERIMENT_OPTIONS}})
     psl_json["options"]["runtime.log.level"] = arguments.psl_log_level
+    if arguments.gurobi_log:
+        psl_json["options"]["gurobi.logtoconsole"] = "true"
 
     # Set the Neural predicate options.
     psl_json["predicates"]["Neural/3"]["options"]["task-name"] = arguments.task
@@ -120,6 +122,9 @@ def _load_args():
     parser.add_argument("--psl-log-level", dest="psl_log_level",
                         action="store", type=str, default="INFO",
                         help="PSL logging level.", choices=["DEBUG", "INFO", "TRACE"])
+    parser.add_argument("--gurobi-log", dest="gurobi_log",
+                        action="store_true", default=False,
+                        help="Turn on Gurobi logging.")
     parser.add_argument("--image-resize", dest="image_resize",
                         action="store", type=float, default=1.0,
                         help="Resize factor for all images.")

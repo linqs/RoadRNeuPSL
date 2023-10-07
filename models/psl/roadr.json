@@ -9,6 +9,7 @@
     "runtime.inference.method": "GurobiInference",
     "weightlearning.inference": "GurobiInference",
     "gurobi.worklimit": 60,
+    "gurobi.logtoconsole": "false",
     "inference.normalize": "false",
     "gradientdescent.scalestepsize": "false",
     "gradientdescent.stepsize": "1.0e-14",
