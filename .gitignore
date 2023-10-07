@@ -23,6 +23,7 @@ __pycache__
 data/psl-data
 data/rgb-images
 data/videos
+data/test_videos
 data/instance_counts.json
 data/requirements_readable.txt
 data/road_trainval_v1.0.json

@@ -9,7 +9,8 @@ function main() {
 
     check_requirements
 
-    fetch_videos_file
+    fetch_train_videos_file
+    fetch_test_videos_file
     fetch_annotations_file
     fetch_counts_file
 
@@ -28,7 +29,7 @@ function check_requirements() {
     fi
 }
 
-function fetch_videos_file() {
+function fetch_train_videos_file() {
     if [[ -e "videos.zip" ]]; then
         echo "videos.zip file found cached, skipping download."
         return
@@ -37,6 +38,23 @@ function fetch_videos_file() {
     wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1YQ9ap3o9pqbD0Pyei68rlaMDcRpUn-qz' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1YQ9ap3o9pqbD0Pyei68rlaMDcRpUn-qz" -O videos.zip
     if [[ "$?" -ne 0 ]]; then
         echo "ERROR: Failed to download videos.zip."
+        exit 30
+    fi
+}
+
+function fetch_test_videos_file() {
+    if [[ -d "test_videos" ]]; then
+        echo "test_videos directory found, skipping download."
+        return
+    fi
+
+    mkdir "test_videos"
+    wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1fYiOdAND2xyML9fEgMTdWnO1PQf8a8GN' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1fYiOdAND2xyML9fEgMTdWnO1PQf8a8GN" -O test_videos/2015-02-06-13-57-16_stereo_centre_01.mp4
+    wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1D7a_T0K5Xko-eZOVRJvIAxi2FpENz7_C' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1D7a_T0K5Xko-eZOVRJvIAxi2FpENz7_C" -O test_videos/2015-02-03-08-45-10_stereo_centre_04.mp4
+    wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=10eq0zDHInLCJS_sFfT2FApEeC86kEZ3K' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=10eq0zDHInLCJS_sFfT2FApEeC86kEZ3K" -O test_videos/2014-12-10-18-10-50_stereo_centre_02.mp4
+    wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1dTdvipm3Y9xEISvlqkzWfQisUzMGvC-V' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1dTdvipm3Y9xEISvlqkzWfQisUzMGvC-V" -O test_videos/2014-06-26-09-31-18_stereo_centre_02.mp4
+    if [[ "$?" -ne 0 ]]; then
+        echo "ERROR: Failed to download test_videos."
         exit 30
     fi
 }
