@@ -84,6 +84,10 @@ def run_neupsl(arguments):
         print("Experiment failed: {}.".format(out_dir))
         exit()
 
+    # Save the output and json file.
+    os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), out_dir))
+    os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), out_dir))
+
 
 def write_neupsl_json(psl_json):
     # Write the options the json file.
