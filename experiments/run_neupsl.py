@@ -47,20 +47,14 @@ def run_neupsl(arguments):
 
     # Update the options.
     psl_json.update({"options": {**original_options,
-                                     **STANDARD_EXPERIMENT_OPTIONS}})
-    psl_json["options"]["runtime.log.level"] = arguments.psl_log_level
-    if arguments.gurobi_log:
-        psl_json["options"]["gurobi.logtoconsole"] = "true"
+                                 **STANDARD_EXPERIMENT_OPTIONS}})
 
-    # Set the Neural predicate options.
-    psl_json["predicates"]["Neural/3"]["options"]["task-name"] = arguments.task
-    psl_json["predicates"]["Neural/3"]["options"]["image-resize"] = arguments.image_resize
-    psl_json["predicates"]["Neural/3"]["options"]["max-frames"] = arguments.max_frames
+    set_log_options(psl_json, arguments)
+    set_neural_predicate_options(psl_json, arguments)
 
     if not arguments.no_learning:
         # Run NeuPSL training.
-        psl_json["options"]["runtime.learn"] = "true"
-        psl_json["options"]["runtime.inference"] = "false"
+        set_runtime_task(psl_json, "true", "false")
 
         write_neupsl_json(psl_json)
 
@@ -73,8 +67,8 @@ def run_neupsl(arguments):
 
     if not arguments.no_inference:
         # Run NeuPSL inference.
-        psl_json["options"]["runtime.learn"] = "false"
-        psl_json["options"]["runtime.inference"] = "true"
+        set_runtime_task(psl_json, "false", "true")
+        set_inference_data(psl_json, arguments)
 
         if arguments.task == "task2":
             psl_json["predicates"]["Label/3"]["options"]["Integer"] = "true"
@@ -91,6 +85,28 @@ def run_neupsl(arguments):
         # Save the output and json file.
         os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), out_dir))
         os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), out_dir))
+
+
+def set_inference_data(psl_json, arguments):
+    if arguments.test_inference:
+        pass
+
+
+def set_log_options(psl_json, arguments):
+    psl_json["options"]["runtime.log.level"] = arguments.psl_log_level
+    if arguments.gurobi_log:
+        psl_json["options"]["gurobi.logtoconsole"] = "true"
+
+
+def set_neural_predicate_options(psl_json, arguments):
+    psl_json["predicates"]["Neural/3"]["options"]["task-name"] = arguments.task
+    psl_json["predicates"]["Neural/3"]["options"]["image-resize"] = arguments.image_resize
+    psl_json["predicates"]["Neural/3"]["options"]["max-frames"] = arguments.max_frames
+
+
+def set_runtime_task(psl_json, learning, inference):
+    psl_json["options"]["runtime.learn"] = learning
+    psl_json["options"]["runtime.inference"] = inference
 
 
 def write_neupsl_json(psl_json):
@@ -137,6 +153,9 @@ def _load_args():
     parser.add_argument("--no-inference", dest="no_inference",
                         action="store_true", default=False,
                         help="Turn off inference step.")
+    parser.add_argument("--test-inference", dest="test_inference",
+                        action="store_true", default=False,
+                        help="Run inference on the test set.")
 
     arguments = parser.parse_args()
 
