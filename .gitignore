@@ -22,6 +22,7 @@ __pycache__
 ########
 data/psl-data
 data/rgb-images
+data/test-rgb-images
 data/videos
 data/test_videos
 data/instance_counts.json
