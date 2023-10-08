@@ -96,7 +96,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             else:
                 trained_model_path = neural_trained_model_path
 
-            self.model.load_state_dict(torch.load(trained_model_path))
+            self.model.load_state_dict(torch.load(trained_model_path, map_location=utils.get_torch_device()))
             self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]))
             self.optimizer = None
