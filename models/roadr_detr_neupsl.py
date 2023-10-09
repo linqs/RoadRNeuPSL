@@ -37,6 +37,8 @@ from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEUPSL_TRAINED_MODEL_DIR
 from utils import NEUPSL_TRAINED_MODEL_FILENAME
+from utils import NEUPSL_VALID_INFERENCE_DIR
+from utils import NEUPSL_TEST_INFERENCE_DIR
 from utils import VIDEO_PARTITIONS
 
 
@@ -48,7 +50,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         super().__init__()
         self.application = None
 
-        self.out_dir = None
+        self.evaluation_out_dir = None
+        self.model_out_dir = None
 
         self.model = None
         self.dataset = None
@@ -74,7 +77,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         logging.info("Initializing neural model for application: {0}".format(application))
         self.application = application
 
-        self.out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR, "neupsl_evaluation")
+        self.model_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR)
 
         self.model = build_model()
 
@@ -89,15 +92,33 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
             self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(options["step-size"]), gamma=float(options["gamma"]))
         else:
-            neupsl_trained_model_path = os.path.join(self.out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
-            if os.path.isfile(neupsl_trained_model_path):
-                logging.info("Saved NeuPSL model found, loading: {0}".format(neupsl_trained_model_path))
-                trained_model_path = neupsl_trained_model_path
+            use_neural_trained_model = options["use-neural-trained-model"] == "true"
+
+            if (options["inference_split"] == "VALID") and use_neural_trained_model:
+                self.evaluation_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_VALID_INFERENCE_DIR,
+                                                       NEURAL_TRAINED_MODEL_DIR, options["evaluation-dir-name"])
+            elif (options["inference_split"] == "VALID") and (not use_neural_trained_model):
+                self.evaluation_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_VALID_INFERENCE_DIR,
+                                                       NEUPSL_TRAINED_MODEL_DIR, options["evaluation-dir-name"])
+            elif (options["inference_split"] == "TEST") and use_neural_trained_model:
+                self.evaluation_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TEST_INFERENCE_DIR,
+                                                       NEURAL_TRAINED_MODEL_DIR, options["evaluation-dir-name"])
+            elif (options["inference_split"] == "TEST") and (not use_neural_trained_model):
+                self.evaluation_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TEST_INFERENCE_DIR,
+                                                       NEUPSL_TRAINED_MODEL_DIR, options["evaluation-dir-name"])
             else:
+                raise ValueError("Invalid inference split: {0}".format(options["inference_split"]))
+
+            if use_neural_trained_model:
                 trained_model_path = neural_trained_model_path
+            else:
+                trained_model_path = os.path.join(self.model_out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
+
+            logging.info("Loading model from: {0}".format(trained_model_path))
 
             self.model.load_state_dict(torch.load(trained_model_path, map_location=utils.get_torch_device()))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
+            annotation_path = TRAIN_VALIDATION_DATA_PATH if options["inference_split"] == "VALID" else None
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], annotation_path, float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]), test=(options["inference_split"] == "TEST"))
             self.optimizer = None
             self.scheduler = None
@@ -157,14 +178,14 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.save()
         else:
             # Inference
-            os.makedirs(self.out_dir, exist_ok=True)
+            os.makedirs(self.evaluation_out_dir, exist_ok=True)
             save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
-                                   output_dir=self.out_dir, from_logits=False)
+                                   output_dir=self.evaluation_out_dir, from_logits=False)
 
             if options["inference_split"] == "VALID":
-                calculate_metrics(self.dataset, self.out_dir)
+                calculate_metrics(self.dataset, self.evaluation_out_dir)
 
-            save_images_with_bounding_boxes(self.dataset, self.out_dir, True,
+            save_images_with_bounding_boxes(self.dataset, self.evaluation_out_dir, True,
                                             NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD,
                                             write_ground_truth=(options["inference_split"] == "VALID"),
                                             test=(options["inference_split"] == "TEST"))
@@ -180,8 +201,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {"is_epoch_complete": False}
 
     def internal_save(self, options={}):
-        os.makedirs(self.out_dir, exist_ok=True)
-        save_model_state(self.model, self.out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
+        os.makedirs(self.model_out_dir, exist_ok=True)
+        save_model_state(self.model, self.model_out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
 
     def set_model_application(self, learning):
         if learning:

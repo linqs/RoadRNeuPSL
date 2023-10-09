@@ -4,6 +4,8 @@ import os
 import torch
 import sys
 
+import tqdm
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
@@ -36,6 +38,8 @@ from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
+from utils import NEURAL_VALID_INFERENCE_DIR
+from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import VIDEO_PARTITIONS
 
 
@@ -112,10 +116,10 @@ def format_saved_predictions(predictions, dataset):
     return frame_indexes, class_predictions, box_predictions
 
 
-def evaluate_dataset(dataset, arguments):
+def run_neural_inference(dataset, arguments):
     if os.path.isfile(os.path.join(arguments.output_dir, PREDICTION_LABELS_JSON_FILENAME)) and \
             os.path.isfile(os.path.join(arguments.output_dir, PREDICTION_LABELS_PKL_FILENAME)):
-        logging.info("Skipping evaluation for %s, already exists." % (arguments.output_dir,))
+        logging.info("Skipping neural inference for %s, already exists." % (arguments.output_dir,))
         return
 
     os.makedirs(os.path.join(arguments.output_dir), exist_ok=True)
@@ -124,16 +128,46 @@ def evaluate_dataset(dataset, arguments):
                             shuffle=False, num_workers=int(os.cpu_count()) - 2,
                             prefetch_factor=4, persistent_workers=True)
 
-    logging.info("Building and loading pre-trained model.")
+    logging.info("Building and loading pre-trained model from {}.".format(arguments.saved_model_path))
     model = build_model()
     model.load_state_dict(torch.load(arguments.saved_model_path))
 
-    logging.info("Evaluating model.")
+    logging.info("Running neural inference with trained model {}.".format(arguments.saved_model_path))
     trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
 
-    frame_indexes, boxes, logits = trainer.evaluate(dataloader)
+    if arguments.test_evaluation:
+        frame_indexes, boxes, logits = predict_all(model, dataloader)
+    else:
+        frame_indexes, boxes, logits = trainer.evaluate(dataloader)
 
     save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
+
+
+def predict_all(model, dataloader: DataLoader):
+    """
+    Use the model to make a prediction on all of the provided data.
+    :param dataloader: The data to make predictions on the model on.
+    """
+    model.eval()
+
+    all_box_predictions = []
+    all_logits = []
+    all_frame_indexes = []
+
+    device = utils.get_torch_device()
+
+    with tqdm.tqdm(dataloader) as tq:
+        for step, batch in enumerate(tq):
+            batch = [b.to(device) for b in batch]
+            frame_ids, pixel_values, pixel_mask, labels, boxes = batch
+
+            predictions = model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+
+            all_box_predictions.extend(predictions["pred_boxes"].cpu().tolist())
+            all_logits.extend(predictions["logits"].cpu().tolist())
+            all_frame_indexes.extend(frame_ids.cpu().tolist())
+
+    return all_frame_indexes, all_box_predictions, all_logits
 
 
 def calculate_metrics(dataset, output_dir):
@@ -178,9 +212,15 @@ def save_images(dataset, arguments):
     if arguments.save_images.upper() == "NONE":
         pass
     elif arguments.save_images.upper() == "BOXES":
-        save_images_with_bounding_boxes(dataset, arguments.output_dir, False, arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD)
+        save_images_with_bounding_boxes(dataset, arguments.output_dir, False,
+                                        arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD,
+                                        write_ground_truth=(not arguments.test_evaluation),
+                                        test=arguments.test_evaluation)
     elif arguments.save_images.upper() == "BOXES_AND_LABELS":
-        save_images_with_bounding_boxes(dataset, arguments.output_dir, True, arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD)
+        save_images_with_bounding_boxes(dataset, arguments.output_dir, True,
+                                        arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD,
+                                        write_ground_truth=(not arguments.test_evaluation),
+                                        test=arguments.test_evaluation)
     else:
         raise ValueError("Invalid save_images argument: %s" % arguments.save_images)
 
@@ -196,13 +236,16 @@ def main(arguments):
         logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
     logging.info("Loading evaluation videos: %s" % arguments.eval_videos.upper())
-    dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task][arguments.eval_videos.upper()], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
+    annotations_path = TRAIN_VALIDATION_DATA_PATH if not arguments.test_evaluation else None
+    dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task][arguments.eval_videos.upper()], annotations_path, arguments.image_resize,
+                           max_frames=arguments.max_frames, test=arguments.test_evaluation)
 
     logging.info("Evaluating dataset.")
-    evaluate_dataset(dataset, arguments)
+    run_neural_inference(dataset, arguments)
 
     logging.info("Calculating metrics.")
-    calculate_metrics(dataset, arguments.output_dir)
+    if not arguments.test_evaluation:
+        calculate_metrics(dataset, arguments.output_dir)
 
     logging.info("Saving images with bounding boxes.")
     save_images(dataset, arguments)
@@ -211,7 +254,8 @@ def main(arguments):
 def _load_args():
     parser = argparse.ArgumentParser(description="Evaluating Model.")
 
-    parser.add_argument("--task", dest="task", type=str, choices=["task1", "task2"])
+    parser.add_argument("--task", dest="task",
+                        type=str, choices=["task1", "task2"])
     parser.add_argument("--seed", dest="seed",
                         action="store", type=int, default=SEED,
                         help="Seed for random number generator.")
@@ -226,7 +270,7 @@ def _load_args():
                         help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
     parser.add_argument("--eval-videos", dest="eval_videos",
                         action="store", type=str, default="VALID",
-                        help="Videos to evaluate on.", choices=["TRAIN", "VALID"])
+                        help="Videos to evaluate on.", choices=["TRAIN", "VALID", "TEST"])
     parser.add_argument("--batch-size", dest="batch_size",
                         action="store", type=int, default=4,
                         help="Batch size.")
@@ -245,11 +289,16 @@ def _load_args():
 
     arguments = parser.parse_args()
 
+    arguments.test_evaluation = arguments.eval_videos.upper() == "TEST"
+
     if arguments.saved_model_path is None:
         arguments.saved_model_path = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
 
     if arguments.output_dir is None:
-        arguments.output_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR, "evaluation")
+        if arguments.test_evaluation:
+            arguments.output_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TEST_INFERENCE_DIR, "evaluation")
+        else:
+            arguments.output_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_VALID_INFERENCE_DIR, "evaluation")
 
     return arguments
 

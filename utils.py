@@ -32,10 +32,14 @@ NEURAL_TRAINED_MODEL_DIR = "trained_model"
 NEURAL_TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"
 NEURAL_TRAINING_CONVERGENCE_FILENAME = "training_convergence.csv"
 NEURAL_TRAINING_SUMMARY_FILENAME = "training_summary.csv"
+NEURAL_VALID_INFERENCE_DIR = "neural_valid_inference"
+NEURAL_TEST_INFERENCE_DIR = "neural_test_inference"
 NEUPSL_TRAINED_MODEL_DIR = "neupsl_trained_model"
 NEUPSL_TRAINED_MODEL_FILENAME = "neupsl_trained_model_parameters.pt"
 NEUPSL_TRAINING_CONVERGENCE_FILENAME = "neupsl_training_convergence.csv"
 NEUPSL_TRAINING_SUMMARY_FILENAME = "neupsl_training_summary.csv"
+NEUPSL_VALID_INFERENCE_DIR = "neupsl_valid_inference"
+NEUPSL_TEST_INFERENCE_DIR = "neupsl_test_inference"
 
 SEED = 4
 

@@ -11,7 +11,10 @@ import logger
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import PSL_MODELS_DIR
+from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEUPSL_TRAINED_MODEL_DIR
+from utils import NEUPSL_VALID_INFERENCE_DIR
+from utils import NEUPSL_TEST_INFERENCE_DIR
 
 STANDARD_EXPERIMENT_OPTIONS = {
     "runtime.log.level": "INFO",
@@ -34,8 +37,8 @@ STANDARD_EXPERIMENT_OPTIONS = {
 
 
 def run_neupsl(arguments):
-    out_dir = os.path.join(BASE_RESULTS_DIR, arguments.task, NEUPSL_TRAINED_MODEL_DIR)
-    os.makedirs(out_dir, exist_ok=True)
+    base_out_dir = os.path.join(BASE_RESULTS_DIR, arguments.task)
+    os.makedirs(base_out_dir, exist_ok=True)
 
     # Load the json file.
     dataset_json_path = os.path.join(PSL_MODELS_DIR, "roadr.json")
@@ -52,18 +55,33 @@ def run_neupsl(arguments):
     set_log_options(psl_json, arguments)
     set_neural_predicate_options(psl_json, arguments)
 
+    learning_out_dir = os.path.join(base_out_dir, "neupsl_learning")
+    os.makedirs(learning_out_dir, exist_ok=True)
+
     if not arguments.no_learning:
         # Run NeuPSL training.
         set_runtime_task(psl_json, "true", "false")
 
         write_neupsl_json(psl_json)
 
-        print("Running NeuPSL learning for: {}.".format(out_dir))
-        exit_code = os.system("cd {} && ./run.sh > {}/learning_out.txt 2> {}/learning_out.err".format(BASE_CLI_DIR, out_dir, out_dir))
+        print("Running NeuPSL learning for: {}.".format(base_out_dir))
+        exit_code = os.system("cd {} && ./run.sh > {}/learning_out.txt 2> {}/learning_out.err".format(BASE_CLI_DIR, learning_out_dir, learning_out_dir))
 
         if exit_code != 0:
-            print("Experiment failed: {}.".format(out_dir))
+            print("Experiment failed: {}.".format(base_out_dir))
             exit()
+
+    inference_out_dir = None
+    if arguments.test_inference and arguments.use_neural_trained_model:
+        inference_out_dir = os.path.join(base_out_dir, NEUPSL_TEST_INFERENCE_DIR, NEURAL_TRAINED_MODEL_DIR)
+    elif arguments.test_inference and (not arguments.use_neural_trained_model):
+        inference_out_dir = os.path.join(base_out_dir, NEUPSL_TEST_INFERENCE_DIR, NEUPSL_TRAINED_MODEL_DIR)
+    elif (not arguments.test_inference) and arguments.use_neural_trained_model:
+        inference_out_dir = os.path.join(base_out_dir, NEUPSL_VALID_INFERENCE_DIR, NEURAL_TRAINED_MODEL_DIR)
+    elif (not arguments.test_inference) and (not arguments.use_neural_trained_model):
+        inference_out_dir = os.path.join(base_out_dir, NEUPSL_VALID_INFERENCE_DIR, NEUPSL_TRAINED_MODEL_DIR)
+
+    os.makedirs(inference_out_dir, exist_ok=True)
 
     if not arguments.no_inference:
         # Run NeuPSL inference.
@@ -75,16 +93,16 @@ def run_neupsl(arguments):
 
         write_neupsl_json(psl_json)
 
-        print("Running NeuPSL inference for: {}.".format(out_dir))
-        exit_code = os.system("cd {} && ./run.sh > {}/inference_out.txt 2> {}/inference_out.err".format(BASE_CLI_DIR, out_dir, out_dir))
+        print("Running NeuPSL inference for: {}.".format(inference_out_dir))
+        exit_code = os.system("cd {} && ./run.sh > {}/inference_out.txt 2> {}/inference_out.err".format(BASE_CLI_DIR, inference_out_dir, inference_out_dir))
 
         if exit_code != 0:
-            print("Experiment failed: {}.".format(out_dir))
+            print("Experiment failed: {}.".format(inference_out_dir))
             exit()
 
         # Save the output and json file.
-        os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), out_dir))
-        os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), out_dir))
+        os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), inference_out_dir))
+        os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), inference_out_dir))
 
 
 def set_inference_split(psl_json, arguments):
@@ -101,6 +119,8 @@ def set_neural_predicate_options(psl_json, arguments):
     psl_json["predicates"]["Neural/3"]["options"]["task-name"] = arguments.task
     psl_json["predicates"]["Neural/3"]["options"]["image-resize"] = arguments.image_resize
     psl_json["predicates"]["Neural/3"]["options"]["max-frames"] = arguments.max_frames
+    psl_json["predicates"]["Neural/3"]["options"]["evaluation-dir-name"] = arguments.evaluation_dir_name
+    psl_json["predicates"]["Neural/3"]["options"]["use-neural-trained-model"] = arguments.use_neural_trained_model
 
 
 def set_runtime_task(psl_json, learning, inference):
@@ -137,6 +157,9 @@ def _load_args():
     parser.add_argument("--psl-log-level", dest="psl_log_level",
                         action="store", type=str, default="INFO",
                         help="PSL logging level.", choices=["DEBUG", "INFO", "TRACE"])
+    parser.add_argument("--evaluation-dir-name", dest="evaluation_dir_name",
+                        action="store", type=str, default="evaluation",
+                        help="Name of the evaluation directory.")
     parser.add_argument("--gurobi-log", dest="gurobi_log",
                         action="store_true", default=False,
                         help="Turn on Gurobi logging.")
@@ -149,6 +172,9 @@ def _load_args():
     parser.add_argument("--no-learning", dest="no_learning",
                         action="store_true", default=False,
                         help="Turn off learning step.")
+    parser.add_argument("--use-neural-trained-model", dest="use_neural_trained_model",
+                        action="store_true", default=False,
+                        help="Use the neural trained model.")
     parser.add_argument("--no-inference", dest="no_inference",
                         action="store_true", default=False,
                         help="Turn off inference step.")
