@@ -85,7 +85,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                                                  NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
 
         if self.application == "learning":
-            self.model.load_state_dict(torch.load(neural_trained_model_path))
+            if os.path.isfile(neural_trained_model_path):
+                self.model.load_state_dict(torch.load(neural_trained_model_path))
             self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
                                         float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]))
