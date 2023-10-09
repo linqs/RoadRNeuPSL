@@ -50,14 +50,17 @@ def build_model():
                                                   ignore_mismatched_sizes=True).to(utils.get_torch_device())
 
 
-def run_setting(arguments, train_dataset, parameters, parameters_string):
+def run_setting(arguments, train_dataset, validation_dataset, parameters, parameters_string):
     if os.path.isfile(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
         logging.info("Skipping training for %s, already exists." % (parameters_string,))
         return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
     os.makedirs(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string), exist_ok=True)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=parameters["batch-size"], shuffle=True, num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=parameters["batch-size"], shuffle=True,
+                                  num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=parameters["batch-size"], shuffle=True,
+                                       num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
 
     model = build_model()
 
@@ -69,7 +72,7 @@ def run_setting(arguments, train_dataset, parameters, parameters_string):
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
 
     trainer = Trainer(model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
-    trainer.train(train_dataloader, n_epochs=parameters["epochs"])
+    trainer.train(train_dataloader, validation_dataloader, n_epochs=parameters["epochs"])
 
     return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
@@ -92,7 +95,10 @@ def main(arguments):
 
     if arguments.hyperparameter_search:
         logging.info("Loading Training Dataset")
-        train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
+        train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
+                                     max_frames=arguments.max_frames)
+        validation_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["VALID"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
+                                          max_frames=arguments.max_frames)
 
         for index in range(len(hyperparameters)):
             hyperparameters_string = ""
@@ -100,7 +106,7 @@ def main(arguments):
                 hyperparameters_string = hyperparameters_string + key + ":" + str(hyperparameters[index][key]) + " -- "
             logging.info("\n%d \ %d -- %s" % (index, len(hyperparameters), hyperparameters_string[:-4]))
 
-            loss = run_setting(arguments, train_dataset, hyperparameters[index], hyperparameters_string[:-4])
+            loss = run_setting(arguments, train_dataset, validation_dataset, hyperparameters[index], hyperparameters_string[:-4])
 
             if loss < best_loss:
                 best_loss = loss
@@ -110,9 +116,12 @@ def main(arguments):
             logging.info("Best hyperparameter setting: %s with loss %f" % (best_parameter_string, best_loss))
 
     logging.info("Loading Training Dataset")
-    train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize, max_frames=arguments.max_frames)
+    train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
+                                 max_frames=arguments.max_frames)
+    validation_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["VALID"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
+                                      max_frames=arguments.max_frames)
 
-    loss = run_setting(arguments, train_dataset, parameter_setting, NEURAL_TRAINED_MODEL_DIR)
+    loss = run_setting(arguments, train_dataset, validation_dataset, parameter_setting, NEURAL_TRAINED_MODEL_DIR)
     logging.info("Final loss: %f" % (loss,))
 
 

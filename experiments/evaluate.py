@@ -138,7 +138,7 @@ def run_neural_inference(dataset, arguments):
     if arguments.test_evaluation:
         frame_indexes, boxes, logits = predict_all(model, dataloader)
     else:
-        frame_indexes, boxes, logits = trainer.evaluate(dataloader)
+        frame_indexes, boxes, logits, results = trainer.compute_total_loss(dataloader)
 
     save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
 

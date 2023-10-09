@@ -12,10 +12,15 @@ from models.model_utils import save_model_state
 from torch.utils.data import DataLoader
 from typing import Tuple, List
 
-from utils import EVALUATION_SUMMARY_FILENAME
+from utils import NEURAL_VALIDATION_SUMMARY_FILENAME
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_TRAINING_CONVERGENCE_FILENAME
+from utils import NEURAL_VALIDATION_CONVERGENCE_FILENAME
 from utils import NEURAL_TRAINING_SUMMARY_FILENAME
+
+BCE_WEIGHT = 1
+GIOU_WEIGHT = 5
+L1_WEIGHT = 2
 
 
 class Trainer:
@@ -28,14 +33,16 @@ class Trainer:
         self.out_directory = out_directory
         self.batch_predictions = None
 
-    def train(self, training_dataloader: DataLoader, n_epochs: int = 500, compute_period: int = 1):
+    def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader, n_epochs: int = 500, compute_period: int = 1):
         """
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.
+        :param validation_dataloader: The validation data to use for training.
         :param n_epochs: (Optional) The total number of epochs to run training.
         :param compute_period: (Optional) The number of epochs to run between each model checkpoint.
         """
         learning_convergence = ""
+        validation_convergence = ""
 
         dataset_size = len(training_dataloader) * training_dataloader.batch_size
 
@@ -71,7 +78,7 @@ class Trainer:
 
                     self.optimizer.zero_grad(set_to_none=True)
 
-                    loss, results = self._compute_loss(batch)
+                    loss, results = self._compute_batch_loss(batch)
 
                     epoch_loss += loss.item()
                     epoch_bce_loss += results["bce_loss"]
@@ -109,17 +116,27 @@ class Trainer:
             previous_epoch_boxes = [] + current_epoch_boxes
             previous_epoch_logits = [] + current_epoch_logits
 
-            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
+            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
                 total_time, epoch_time, epoch_loss / dataset_size,
                 epoch_bce_loss / dataset_size, epoch_giou_loss / dataset_size,
-                epoch_l1_loss / dataset_size, epoch_logit_movement, epoch_box_movement)
+                epoch_l1_loss / dataset_size)
 
             if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
                 with open(os.path.join(self.out_directory, NEURAL_TRAINING_CONVERGENCE_FILENAME), "w") as training_convergence_checkpoint_file:
-                    training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Total Loss, BCE Loss, GIOU Loss, L2 Loss, Logit Movement, Box Movement\n")
+                    training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Total Loss, BCE Loss, GIOU Loss, L1 Loss\n")
                     training_convergence_checkpoint_file.write(learning_convergence)
 
-                save_model_state(self.model, self.out_directory, NEURAL_TRAINED_MODEL_FILENAME)
+                save_model_state(self.model, self.out_directory, "epoch_{}_".format(epoch) + NEURAL_TRAINED_MODEL_FILENAME)
+
+                _, _, _, validation_results = self.compute_total_loss(validation_dataloader)
+                validation_convergence += "{:5d}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
+                    epoch, total_time, epoch_time, validation_results["loss"],
+                    validation_results["bce_loss"], validation_results["giou_loss"],
+                    validation_results["l1_loss"])
+
+                with open(os.path.join(self.out_directory, NEURAL_VALIDATION_CONVERGENCE_FILENAME), "w") as validation_convergence_checkpoint_file:
+                    validation_convergence_checkpoint_file.write("Epoch, Total Time(s), Epoch Time(s), Total Loss, BCE Loss, GIOU Loss, L1 Loss\n")
+                    validation_convergence_checkpoint_file.write(validation_convergence)
 
         if torch.cuda.is_available():
             max_gpu_mem = torch.cuda.max_memory_allocated()
@@ -127,7 +144,7 @@ class Trainer:
             max_gpu_mem = -1
 
         with open(os.path.join(self.out_directory, NEURAL_TRAINING_SUMMARY_FILENAME), "w") as training_summary_file:
-            training_summary_file.write("Total Loss, BCE Loss, GIOU Loss, L2 Loss, Total Time(s), Max GPU memory (B)\n")
+            training_summary_file.write("Total Loss, BCE Loss, GIOU Loss, L1 Loss, Total Time(s), Max GPU memory (B)\n")
             training_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:d}".format(
                 epoch_loss / dataset_size,
                 epoch_bce_loss / dataset_size,
@@ -135,10 +152,24 @@ class Trainer:
                 epoch_l1_loss / dataset_size,
                 total_time, max_gpu_mem))
 
-    def evaluate(self, dataloader: DataLoader):
+        _, _, _, validation_results = self.compute_total_loss(validation_dataloader)
+        with open(os.path.join(self.out_directory, NEURAL_VALIDATION_SUMMARY_FILENAME), "w") as validation_summary_file:
+            validation_summary_file.write("Total Loss, BCE Loss, GIOU Loss, L1 Loss, Total Time(s), Max GPU memory (B)\n")
+            validation_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:d}".format(
+                validation_results["loss"],
+                validation_results["bce_loss"],
+                validation_results["giou_loss"],
+                validation_results["l1_loss"],
+                total_time, max_gpu_mem))
+
+    def compute_total_loss(self, dataloader: DataLoader, bce_weight: int = BCE_WEIGHT, giou_weight: int = GIOU_WEIGHT, l1_weight: int = L1_WEIGHT):
         """
         Evaluate the model on the provided data.
         :param dataloader: The data to evaluate the model on.
+        :param bce_weight: The weight to apply to the binary cross entropy loss.
+        :param giou_weight: The weight to apply to the generalized IoU loss.
+        :param l1_weight: The weight to apply to the l1 loss.
+        :return: The predictions and the losses for the predictions on the provided data.
         """
         self.model.eval()
 
@@ -148,21 +179,22 @@ class Trainer:
         all_logits = []
         all_frame_indexes = []
         total_loss = 0
-        bce_loss = 0
-        giou_loss = 0
-        l1_loss = 0
+        total_bce_loss = 0
+        total_giou_loss = 0
+        total_l1_loss = 0
 
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
-
-        evaluation_start_time = time.time()
 
         with tqdm.tqdm(dataloader) as tq:
             for step, batch in enumerate(tq):
                 batch = [b.to(self.device) for b in batch]
 
-                loss, results = self._compute_loss(batch)
+                loss, results = self._compute_batch_loss(batch, bce_weight=bce_weight, giou_weight=giou_weight, l1_weight=l1_weight)
                 total_loss += loss.item()
+                total_bce_loss += results["bce_loss"]
+                total_giou_loss += results["giou_loss"]
+                total_l1_loss += results["l1_loss"]
 
                 frame_ids, pixel_values, pixel_mask, labels, boxes = batch
 
@@ -174,37 +206,28 @@ class Trainer:
 
                 postfix_data = {
                     "loss": total_loss / ((step + 1) * dataloader.batch_size),
-                    "loss_bce": bce_loss / ((step + 1) * dataloader.batch_size),
-                    "loss_giou": giou_loss / ((step + 1) * dataloader.batch_size),
-                    "loss_l1": l1_loss / ((step + 1) * dataloader.batch_size),
+                    "loss_bce": total_bce_loss / ((step + 1) * dataloader.batch_size),
+                    "loss_giou": total_giou_loss / ((step + 1) * dataloader.batch_size),
+                    "loss_l1": total_l1_loss / ((step + 1) * dataloader.batch_size),
                 }
 
             tq.set_postfix(**postfix_data)
 
-        total_time = time.time() - evaluation_start_time
+        total_results = {
+            "bce_loss": (bce_weight * total_bce_loss) / dataset_size,
+            "giou_loss": (giou_weight * total_giou_loss) / dataset_size,
+            "l1_loss": (l1_weight * total_l1_loss) / dataset_size,
+            "loss": (bce_weight * total_bce_loss + giou_weight * total_giou_loss + l1_weight * total_l1_loss) / dataset_size
+        }
 
-        if torch.cuda.is_available():
-            max_gpu_mem = torch.cuda.max_memory_allocated()
-        else:
-            max_gpu_mem = -1
+        return all_frame_indexes, all_box_predictions, all_logits, total_results
 
-        with open(os.path.join(self.out_directory, EVALUATION_SUMMARY_FILENAME), "w") as evaluation_summary_file:
-            evaluation_summary_file.write("Total Loss, BCE Loss, GIOU Loss, L2 Loss, Total Time(s), Max GPU memory (B)\n")
-            evaluation_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:d}".format(
-                total_loss / dataset_size,
-                bce_loss / dataset_size,
-                giou_loss / dataset_size,
-                l1_loss / dataset_size,
-                total_time, max_gpu_mem))
-
-        return all_frame_indexes, all_box_predictions, all_logits
-
-    def _compute_loss(self, data: (Tuple, List), bce_weight: int = 1, giou_weight: int = 5, l1_weight: int = 2) -> torch.Tensor:
+    def _compute_batch_loss(self, data: (Tuple, List), bce_weight: int = BCE_WEIGHT, giou_weight: int = GIOU_WEIGHT, l1_weight: int = L1_WEIGHT) -> torch.Tensor:
         """
         Compute the loss for the provided data.
         :param data: The batch to compute the training loss for.
-        :param bce_weight: The weight to apply to the binary cross entropy loss. Default is 1 from DETR paper.
-        :param giou_weight: The weight to apply to the generalized IoU loss. Default is 2 from DETR paper.
+        :param bce_weight: The weight to apply to the binary cross entropy loss.
+        :param giou_weight: The weight to apply to the generalized IoU loss.
         :return: The training loss for the provided batch.
         """
         frame_ids, pixel_values, pixel_mask, labels, boxes = data
