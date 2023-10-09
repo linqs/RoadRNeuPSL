@@ -8,9 +8,12 @@ import torch
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
+from utils import load_json_file
+from utils import write_json_file
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import PSL_MODELS_DIR
+from utils import NEUPSL_MODEL_FILENAME
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEUPSL_TRAINED_MODEL_DIR
 from utils import NEUPSL_VALID_INFERENCE_DIR
@@ -40,12 +43,17 @@ def run_neupsl(arguments):
     base_out_dir = os.path.join(BASE_RESULTS_DIR, arguments.task)
     os.makedirs(base_out_dir, exist_ok=True)
 
-    # Load the json file.
-    dataset_json_path = os.path.join(PSL_MODELS_DIR, "roadr.json")
+    model_name = "roadr"
+    if arguments.with_tubes:
+        model_name += "-tubes"
+    if arguments.with_soft_co_occurrence:
+        model_name += "-soft-co-occurrence"
+    model_name += ".json"
 
-    psl_json = None
-    with open(dataset_json_path, "r") as file:
-        psl_json = json.load(file)
+    # Load the json file.
+    dataset_json_path = os.path.join(PSL_MODELS_DIR, model_name)
+
+    psl_json = load_json_file(dataset_json_path)
     original_options = psl_json["options"]
 
     # Update the options.
@@ -62,7 +70,7 @@ def run_neupsl(arguments):
         # Run NeuPSL training.
         set_runtime_task(psl_json, "true", "false")
 
-        write_neupsl_json(psl_json)
+        write_json_file(os.path.join(BASE_CLI_DIR, NEUPSL_MODEL_FILENAME), psl_json, indent=4)
 
         print("Running NeuPSL learning for: {}.".format(base_out_dir))
         exit_code = os.system("cd {} && ./run.sh > {}/learning_out.txt 2> {}/learning_out.err".format(BASE_CLI_DIR, learning_out_dir, learning_out_dir))
@@ -91,7 +99,7 @@ def run_neupsl(arguments):
         if arguments.task == "task2":
             psl_json["predicates"]["Label/3"]["options"]["Integer"] = "true"
 
-        write_neupsl_json(psl_json)
+        write_json_file(os.path.join(BASE_CLI_DIR, NEUPSL_MODEL_FILENAME), psl_json, indent=4)
 
         print("Running NeuPSL inference for: {}.".format(inference_out_dir))
         exit_code = os.system("cd {} && ./run.sh > {}/inference_out.txt 2> {}/inference_out.err".format(BASE_CLI_DIR, inference_out_dir, inference_out_dir))
@@ -101,7 +109,7 @@ def run_neupsl(arguments):
             exit()
 
         # Save the output and json file.
-        os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, "roadr.json"), inference_out_dir))
+        os.system("cp {} {}".format(os.path.join(BASE_CLI_DIR, NEUPSL_MODEL_FILENAME), inference_out_dir))
         os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), inference_out_dir))
 
 
@@ -128,12 +136,6 @@ def set_runtime_task(psl_json, learning, inference):
     psl_json["options"]["runtime.inference"] = inference
 
 
-def write_neupsl_json(psl_json):
-    # Write the options the json file.
-    with open(os.path.join(BASE_CLI_DIR, "roadr.json"), "w") as file:
-        json.dump(psl_json, file, indent=4)
-
-
 def main(arguments):
     logger.initLogging(arguments.log_level)
 
@@ -157,6 +159,12 @@ def _load_args():
     parser.add_argument("--psl-log-level", dest="psl_log_level",
                         action="store", type=str, default="INFO",
                         help="PSL logging level.", choices=["DEBUG", "INFO", "TRACE"])
+    parser.add_argument("--with-tubes", dest="with_tubes",
+                        action="store_true", default=False,
+                        help="Add tube rules to PSL model.")
+    parser.add_argument("--with-soft-co-occurrence", dest="with_soft_co_occurrence",
+                        action="store_true", default=False,
+                        help="Add soft co-occurrence rules to PSL model.")
     parser.add_argument("--evaluation-dir-name", dest="evaluation_dir_name",
                         action="store", type=str, default="evaluation",
                         help="Name of the evaluation directory.")
