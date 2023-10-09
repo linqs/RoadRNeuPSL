@@ -1,0 +1,120 @@
+{
+  "options": {
+    "runtime.log.level": "INFO",
+    "runtime.db.intids": "true",
+    "runtime.learn": "true",
+    "runtime.learn.method": "Energy",
+    "runtime.inference.deep.batching": "true",
+    "runtime.inference.output.results": "true",
+    "runtime.inference.method": "GurobiInference",
+    "weightlearning.inference": "GurobiInference",
+    "gurobi.worklimit": 60,
+    "inference.normalize": "false",
+    "gradientdescent.scalestepsize": "false",
+    "gradientdescent.stepsize": "1.0e-14",
+    "gradientdescent.trainingcomputeperiod": "5",
+    "gradientdescent.stopcomputeperiod": "5",
+    "gradientdescent.numsteps": "50",
+    "gradientdescent.runfulliterations": "true",
+    "gradientdescent.batchgenerator": "NeuralBatchGenerator"
+  },
+  "learn": {
+    "rules": [
+      "1.0: Neural(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
+      "1.0: Neural(FrameID1, BoundingBoxID, Class1) & LinkedFrame(FrameID1, FrameID2) = Neural(FrameID2, BoundingBoxID, Class1) ^2",
+
+      "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}"
+    ]
+  },
+  "infer": {
+    "rules": [
+      "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
+
+      "Label(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
+      "1.0: Neural(FrameID1, BoundingBoxID, Class1) & LinkedFrame(FrameID1, FrameID2) = Neural(FrameID2, BoundingBoxID, Class1) ^2",
+
+      "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
+    ]
+  },
+  "predicates": {
+    "Neural/3": {
+      "type": "DeepPredicate",
+      "options": {
+        "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
+        "entity-data-map-path": "../data/psl-data/experiment::tube-size-2/entity-data-map.txt",
+        "entity-argument-indexes": "0,1",
+        "task-name": "task1",
+        "class-size": 46,
+        "batch-size": 2,
+        "max-frames": 0,
+        "image-resize": 1.0,
+        "alpha": 0.5,
+        "learning-rate": 1.0e-5,
+        "weight-decay": 1.0e-5,
+        "step-size": 500,
+        "gamma": 0.1
+      },
+      "targets": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+        ]
+      }
+    },
+    "Label/3": {
+      "options": {
+        "integer": "false"
+      },
+      "targets": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+        ]
+      }
+    },
+    "LinkedFrame/2": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/linked-frame.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/linked-frame.txt"
+        ]
+      }
+    },
+    "SoftCoOccurrence/2": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/soft-co-occurrence.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/soft-co-occurrence.txt"
+        ]
+      }
+    },
+    "BoundingBox/1": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+        ]
+      }
+    },
+    "Agent/1": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+        ]
+      }
+    }
+  }
+}
