@@ -97,8 +97,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                 trained_model_path = neural_trained_model_path
 
             self.model.load_state_dict(torch.load(trained_model_path, map_location=utils.get_torch_device()))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["VALID"], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
-                                        max_frames=int(options["max-frames"]))
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], TRAIN_VALIDATION_DATA_PATH, float(options["image-resize"]),
+                                        max_frames=int(options["max-frames"]), test=(options["inference_split"] == "TEST"))
             self.optimizer = None
             self.scheduler = None
 
@@ -160,8 +160,14 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             os.makedirs(self.out_dir, exist_ok=True)
             save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
                                    output_dir=self.out_dir, from_logits=False)
-            calculate_metrics(self.dataset, self.out_dir)
-            save_images_with_bounding_boxes(self.dataset, self.out_dir, True, NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD)
+
+            if options["inference_split"] == "VALID":
+                calculate_metrics(self.dataset, self.out_dir)
+
+            save_images_with_bounding_boxes(self.dataset, self.out_dir, True,
+                                            NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD,
+                                            write_ground_truth=(options["inference_split"] == "VALID"),
+                                            test=(options["inference_split"] == "TEST"))
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)

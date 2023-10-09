@@ -64,7 +64,8 @@ class RoadRDataset(Dataset):
                 if (not self.test) and ("annos" not in self.annotations[videoname]['frames'][str(int(frame_file_name.strip(".jpg")))]):
                     continue
                 else:
-                    assert int(frame_file_name.strip(".jpg")) == self.annotations[videoname]['frames'][str(int(frame_file_name.strip(".jpg")))]['rgb_image_id']
+                    if not self.test:
+                        assert int(frame_file_name.strip(".jpg")) == self.annotations[videoname]['frames'][str(int(frame_file_name.strip(".jpg")))]['rgb_image_id']
 
                 self.frame_indexes[(videoname, frame_file_name)] = len(self.frame_ids)
                 self.frame_ids.append([videoname, frame_file_name])
@@ -76,7 +77,7 @@ class RoadRDataset(Dataset):
         image = self.processor(Image.open(os.path.join(self.base_rgb_images_dir, videoname, framename)))
 
         if self.test:
-            return image['pixel_values'][0], image['pixel_mask'][0], None, None
+            return image['pixel_values'][0], image['pixel_mask'][0], torch.tensor([]), torch.tensor([])
 
         annotations = self.annotations[videoname]['frames'][str(int(framename[:-4]))]
 

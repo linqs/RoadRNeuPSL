@@ -68,7 +68,7 @@ def run_neupsl(arguments):
     if not arguments.no_inference:
         # Run NeuPSL inference.
         set_runtime_task(psl_json, "false", "true")
-        set_inference_data(psl_json, arguments)
+        set_inference_split(psl_json, arguments)
 
         if arguments.task == "task2":
             psl_json["predicates"]["Label/3"]["options"]["Integer"] = "true"
@@ -87,9 +87,8 @@ def run_neupsl(arguments):
         os.system("cp -r {} {}".format(os.path.join(BASE_CLI_DIR, "inferred-predicates"), out_dir))
 
 
-def set_inference_data(psl_json, arguments):
-    if arguments.test_inference:
-        pass
+def set_inference_split(psl_json, arguments):
+    psl_json["predicates"]["Neural/3"]["options"]["inference_split"] = "TEST" if arguments.test_inference else "VALID"
 
 
 def set_log_options(psl_json, arguments):

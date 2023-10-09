@@ -57,7 +57,11 @@ VIDEO_PARTITIONS = {
                   "2015-02-24-12-32-19_stereo_centre_04"],
         "VALID": ["2014-06-26-09-53-12_stereo_centre_02",
                   "2014-11-25-09-18-32_stereo_centre_04",
-                  "2015-02-13-09-16-26_stereo_centre_02"]
+                  "2015-02-13-09-16-26_stereo_centre_02"],
+        "TEST": ["2014-06-26-09-31-18_stereo_centre_02",
+                 "2014-12-10-18-10-50_stereo_centre_02",
+                 "2015-02-03-08-45-10_stereo_centre_04",
+                 "2015-02-06-13-57-16_stereo_centre_01"]
     },
     "task2": {
         "TRAIN": ["2014-06-25-16-45-34_stereo_centre_02",
@@ -77,7 +81,11 @@ VIDEO_PARTITIONS = {
                   "2015-03-03-11-31-36_stereo_centre_01"],
         "VALID": ["2014-06-26-09-53-12_stereo_centre_02",
                   "2014-11-25-09-18-32_stereo_centre_04",
-                  "2015-02-13-09-16-26_stereo_centre_02"]
+                  "2015-02-13-09-16-26_stereo_centre_02"],
+        "TEST": ["2014-06-26-09-31-18_stereo_centre_02",
+                 "2014-12-10-18-10-50_stereo_centre_02",
+                 "2015-02-03-08-45-10_stereo_centre_04",
+                 "2015-02-06-13-57-16_stereo_centre_01"]
     }
 }
 
