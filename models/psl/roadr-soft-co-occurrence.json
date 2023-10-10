@@ -30,8 +30,8 @@
     "rules": [
       "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
 
-      "1.0: Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
-      "Label(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
+      "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
+      "1.0: Label(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) ^2",
 
       "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
     ]

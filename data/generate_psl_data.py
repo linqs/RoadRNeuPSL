@@ -50,14 +50,25 @@ def generate_experiment(experiment_dir, tube_size):
 
     entity_targets = []
     linked_frames = []
+    same_box_targets = []
+    same_corner_targets = []
     for tube_index in range(tube_size):
         if tube_index < tube_size - 1:
             linked_frames.append([tube_index, tube_index + 1])
             linked_frames.append([tube_index + 1, tube_index])
 
-        for bounding_box_index in range(NUM_NEUPSL_QUERIES):
+        for bounding_box_index_i in range(NUM_NEUPSL_QUERIES):
             for class_index in range(NUM_CLASSES + len(BOUNDING_BOX_CLASSES)):
-                entity_targets.append([tube_index, bounding_box_index, class_index])
+                entity_targets.append([tube_index, bounding_box_index_i, class_index])
+
+            if tube_index < tube_size - 1:
+                for bounding_box_index_j in range(NUM_NEUPSL_QUERIES):
+                    same_box_targets.append([tube_index, tube_index + 1, bounding_box_index_i, bounding_box_index_j])
+                    same_box_targets.append([tube_index + 1, tube_index, bounding_box_index_i, bounding_box_index_j])
+                    for corner_index in range(4):
+                        same_corner_targets.append([tube_index, tube_index + 1, bounding_box_index_i, bounding_box_index_j, corner_index])
+                        same_corner_targets.append([tube_index + 1, tube_index, bounding_box_index_i, bounding_box_index_j, corner_index])
+
 
     hard_co_occurrence = load_constraints(os.path.join(THIS_DIR, "constraints", "hard-co-occurrence.csv"))
     soft_co_occurrence = load_constraints(os.path.join(THIS_DIR, "constraints", "soft-co-occurrence.csv"))
@@ -67,6 +78,8 @@ def generate_experiment(experiment_dir, tube_size):
     utils.write_psl_file(os.path.join(experiment_dir, "classes-bounding-box.txt"), bounding_box_classes)
     utils.write_psl_file(os.path.join(experiment_dir, "entity-targets.txt"), entity_targets)
     utils.write_psl_file(os.path.join(experiment_dir, "linked-frame.txt"), linked_frames)
+    utils.write_psl_file(os.path.join(experiment_dir, "same-box-targets.txt"), same_box_targets)
+    utils.write_psl_file(os.path.join(experiment_dir, "same-corner-targets.txt"), same_corner_targets)
     utils.write_psl_file(os.path.join(experiment_dir, "hard-co-occurrence.txt"), hard_co_occurrence)
     utils.write_psl_file(os.path.join(experiment_dir, "soft-co-occurrence.txt"), soft_co_occurrence)
 

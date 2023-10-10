@@ -33,7 +33,17 @@
 
       "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
 
-      "1.0: Neural(FrameID1, BoundingBoxID, Class1) & LinkedFrame(FrameID1, FrameID2) = Neural(FrameID2, BoundingBoxID, Class1) ^2",
+      "0 * LinkedFrame(FrameID1, FrameID2) + Neural(FrameID1, BoundingBoxID1, '42') - Neural(FrameID2, BoundingBoxID2, '42') = 1.0 - SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '0') .",
+      "0 * LinkedFrame(FrameID1, FrameID2) + Neural(FrameID1, BoundingBoxID1, '43') - Neural(FrameID2, BoundingBoxID2, '43') = 1.0 - SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '1') .",
+      "0 * LinkedFrame(FrameID1, FrameID2) + Neural(FrameID1, BoundingBoxID1, '44') - Neural(FrameID2, BoundingBoxID2, '44') = 1.0 - SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '2') .",
+      "0 * LinkedFrame(FrameID1, FrameID2) + Neural(FrameID1, BoundingBoxID1, '45') - Neural(FrameID2, BoundingBoxID2, '45') = 1.0 - SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '3') .",
+
+      // "1.0: LinkedFrame(FrameID1, FrameID2) & Neural(FrameID1, BoundingBoxID1, Class) & Neural(FrameID2, BoundingBoxID2, Class) & !BoundingBox(Class) -> SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) ^2",
+      // "1.0: LinkedFrame(FrameID1, FrameID2) & Neural(FrameID1, BoundingBoxID1, Class) & Neural(FrameID2, BoundingBoxID2, Class) & !BoundingBox(Class) & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '0') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '1') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '2') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '3') -> SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) ^2",
+      "1.0: LinkedFrame(FrameID1, FrameID2) & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '0') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '1') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '2') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '3') -> SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) ^2",
+      "1.0: LinkedFrame(FrameID1, FrameID2) & Label(FrameID1, BoundingBoxID, Class) & SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) & !BoundingBox(Class) -> Label(FrameID2, BoundingBoxID, Class) ^2",
+
+      "SameBox(FrameID1, FrameID2, BoundingBoxID1, +BoundingBoxID2) <= 1 .",
 
       "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
     ]
@@ -75,6 +85,32 @@
         ],
         "infer": [
           "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+        ]
+      }
+    },
+    "SameCorner/5": {
+      "options": {
+        "integer": "false"
+      },
+      "targets": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/same-corner-targets.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/same-corner-targets.txt"
+        ]
+      }
+    },
+    "SameBox/4": {
+      "options": {
+        "integer": "true"
+      },
+      "targets": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/same-box-targets.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/same-box-targets.txt"
         ]
       }
     },
