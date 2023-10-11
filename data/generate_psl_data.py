@@ -8,6 +8,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 import utils
 
+from utils import load_constraint_file
+from utils import HARD_CONSTRAINTS_PATH
+from utils import SOFT_CONSTRAINTS_PATH
 from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 
@@ -21,19 +24,8 @@ AGENT_CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 BOUNDING_BOX_CLASSES = [41, 42, 43, 44, 45]
 
 
-def load_constraints(path):
-    constraints = []
-    raw_constraints = utils.load_csv_file(path)
-    raw_constraints = [row[1:] for row in raw_constraints[1:]]
-    for index_i in range(len(raw_constraints)):
-        for index_j in range(len(raw_constraints)):
-            constraints.append([index_i, index_j, int(raw_constraints[index_i][index_j])])
-
-    return constraints
-
-
 def generate_experiment(experiment_dir, tube_size):
-    utils.make_dir(experiment_dir)
+    os.makedirs(experiment_dir, exist_ok=True)
 
     entity_data_map = []
     for tube_index in range(tube_size):
@@ -70,8 +62,8 @@ def generate_experiment(experiment_dir, tube_size):
                         same_corner_targets.append([tube_index + 1, tube_index, bounding_box_index_i, bounding_box_index_j, corner_index])
 
 
-    hard_co_occurrence = load_constraints(os.path.join(THIS_DIR, "constraints", "hard-co-occurrence.csv"))
-    soft_co_occurrence = load_constraints(os.path.join(THIS_DIR, "constraints", "soft-co-occurrence.csv"))
+    hard_co_occurrence = load_constraint_file(HARD_CONSTRAINTS_PATH)
+    soft_co_occurrence = load_constraint_file(SOFT_CONSTRAINTS_PATH)
 
     utils.write_psl_file(os.path.join(experiment_dir, "entity-data-map.txt"), entity_data_map)
     utils.write_psl_file(os.path.join(experiment_dir, "classes-agent.txt"), agent_classes)

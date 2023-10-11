@@ -1,10 +1,11 @@
 import csv
 import json
-import pickle
-
-import numpy as np
 import os
+import pickle
 import random
+import re
+
+import numpy
 import torch
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -16,13 +17,11 @@ PSL_MODELS_DIR = os.path.join(THIS_DIR, "models", "psl")
 
 BASE_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "rgb-images")
 BASE_TEST_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "test-rgb-images")
-BASE_RGB_IMAGES_PROCESSED_DIR = os.path.join(BASE_DATA_DIR, "rgb-images-processed")
 
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
-CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
+HARD_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
+SOFT_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "soft-co-occurrence.csv")
 
-EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
-EVALUATION_SUMMARY_FILENAME = "evaluation_summary.json"
 PREDICTION_LOGITS_JSON_FILENAME = "prediction_logits.json"
 PREDICTION_LOGITS_PKL_FILENAME = "prediction_logits.pkl"
 PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
@@ -39,8 +38,6 @@ NEURAL_TEST_INFERENCE_DIR = "neural_test_inference"
 NEUPSL_MODEL_FILENAME = "roadr.json"
 NEUPSL_TRAINED_MODEL_DIR = "neupsl_trained_model"
 NEUPSL_TRAINED_MODEL_FILENAME = "neupsl_trained_model_parameters.pt"
-NEUPSL_TRAINING_CONVERGENCE_FILENAME = "neupsl_training_convergence.csv"
-NEUPSL_TRAINING_SUMMARY_FILENAME = "neupsl_training_summary.csv"
 NEUPSL_VALID_INFERENCE_DIR = "neupsl_valid_inference"
 NEUPSL_TEST_INFERENCE_DIR = "neupsl_test_inference"
 
@@ -193,45 +190,47 @@ ORIGINAL_LABEL_MAPPING = {
 }
 
 
-def check_cached_file(out_file: str):
+def ratio_to_pixel_coordinates(bounding_boxes, height, width):
     """
-    Check if the file with the provided path already exists.
-    :param out_file: The path to the file.
-    :return: True if the output directory contains an out.txt file indicating the experiment has been ran.
+    Converts bounding boxes from ratio to pixel coordinates.
+    :param bounding_boxes: List of bounding boxes in ratio coordinates.
+    :param height: Height of the image.
+    :param width: Width of the image.
+    :return:
     """
-    return os.path.exists(out_file)
+    if len(bounding_boxes) != 0:
+        bounding_boxes[:, 0] *= width
+        bounding_boxes[:, 1] *= height
+        bounding_boxes[:, 2] *= width
+        bounding_boxes[:, 3] *= height
+
+    return bounding_boxes
 
 
-def make_dir(out_directory: str):
+def box_cxcywh_to_xyxy(x):
     """
-    Make the run output directory. If the directory exists, do nothing.
-    :param out_directory: The path to the run output directory.
+    Convert bounding box format from [x_c, y_c, w, h] to [x0, y0, x1, y1]
+    where x_c, y_c are the center coordinates, w, h are the width and height of the box.
+    :param x: The bounding box in [x_c, y_c, w, h] format.
+    :return: The bounding box in [x0, y0, x1, y1] format.
     """
-    os.makedirs(out_directory, exist_ok=True)
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h),
+         (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
 
 
-def load_csv_file(path, delimiter=','):
-    with open(path, 'r') as file:
-        reader = csv.reader(file, delimiter=delimiter)
-        return list(reader)
-
-
-def write_json_file(path, data, indent=4):
-    with open(path, "w") as file:
-        if indent is None:
-            json.dump(data, file)
-        else:
-            json.dump(data, file, indent=indent)
-
-
-def load_json_file(path):
-    with open(path, "r") as file:
-        return json.load(file)
-
-
-def write_pkl_file(path, data):
-    with open(path, "wb") as file:
-        pickle.dump(data, file)
+def box_xyxy_to_cxcywh(x):
+    """
+    Convert bounding box format from [x0, y0, x1, y1] to [x_c, y_c, w, h]
+    where x_c, y_c are the center coordinates, w, h are the width and height of the box.
+    :param x: The bounding box in [x0, y0, x1, y1] format.
+    :return: The bounding box in [x_c, y_c, w, h] format.
+    """
+    x0, y0, x1, y1 = x.unbind(-1)
+    b = [(x0 + x1) / 2, (y0 + y1) / 2,
+         (x1 - x0), (y1 - y0)]
+    return torch.stack(b, dim=-1)
 
 
 def write_psl_file(path, data):
@@ -254,26 +253,44 @@ def load_psl_file(path, dtype=str):
     return data
 
 
-def enumerate_hyperparameters(hyperparameters_dict, current_hyperparameters={}):
-    for key in sorted(hyperparameters_dict):
-        hyperparameters = []
-        for value in hyperparameters_dict[key]:
-            next_hyperparameters = current_hyperparameters.copy()
-            next_hyperparameters[key] = value
+def write_json_file(path, data, indent=4):
+    with open(path, "w") as file:
+        if indent is None:
+            json.dump(data, file)
+        else:
+            json.dump(data, file, indent=indent)
 
-            remaining_hyperparameters = hyperparameters_dict.copy()
-            remaining_hyperparameters.pop(key)
 
-            if remaining_hyperparameters:
-                hyperparameters = hyperparameters + enumerate_hyperparameters(remaining_hyperparameters, next_hyperparameters)
-            else:
-                hyperparameters.append(next_hyperparameters)
-        return hyperparameters
+def load_json_file(path):
+    with open(path, "r") as file:
+        return json.load(file)
+
+
+def write_pkl_file(path, data):
+    with open(path, "wb") as file:
+        pickle.dump(data, file)
+
+
+def load_csv_file(path, delimiter=','):
+    with open(path, 'r') as file:
+        reader = csv.reader(file, delimiter=delimiter)
+        return list(reader)
+
+
+def load_constraint_file(path):
+    raw_constraints = load_csv_file(path)
+
+    constraints = []
+    for index_i in range(len(raw_constraints) - 1):
+        for index_j in range(len(raw_constraints[index_i]) - 1):
+            constraints.append([index_i, index_j, int(raw_constraints[index_i + 1][index_j + 1])])
+
+    return constraints
 
 
 def seed_everything(seed):
     random.seed(seed)
-    np.random.seed(seed)
+    numpy.random.seed(seed)
     torch.manual_seed(seed)
 
     if torch.cuda.is_available():
@@ -291,3 +308,11 @@ def get_torch_device():
         return torch.device("mps")
     else:
         return torch.device("cpu")
+
+
+def save_model_state(model: torch.nn.Module, out_directory: str, filename):
+    formatted_model_state_dict = {
+        re.sub(r"^module\.", "", key).strip(): model.state_dict()[key]
+        for key in model.state_dict()
+    }
+    torch.save(formatted_model_state_dict, os.path.join(out_directory, filename))

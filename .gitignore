@@ -32,6 +32,7 @@ data/videos.zip
 
 # Models #
 ##########
+cli/roadr.json
 *.pt
 
 # Experiment Output #

@@ -5,32 +5,19 @@ import torchvision
 
 from matplotlib import pyplot as plt
 
-import utils
+from utils import load_json_file
+from utils import ratio_to_pixel_coordinates
 from utils import BASE_RGB_IMAGES_DIR
 from utils import BASE_TEST_RGB_IMAGES_DIR
-from utils import PREDICTION_LOGITS_JSON_FILENAME
 from utils import LABEL_MAPPING
-
-
-FONT_SIZE = 7
-FONT_COLOR = "blue"
-FONT_BOUNDING_BOX = dict(facecolor="white", alpha=0.5, edgecolor="none", pad=-0.1)
+from utils import PREDICTION_LOGITS_JSON_FILENAME
 
 BORDER_LINEWIDTH = 1
-GROUND_TRUTH_BORDER_COLOR = (1, 0, 0)
 DETECTED_BORDER_COLOR = (0, 1, 0)
-
-
-def ratio_to_pixel_coordinates(bounding_boxes, height, width):
-    if len(bounding_boxes) == 0:
-        return bounding_boxes
-
-    bounding_boxes[:, 0] *= width
-    bounding_boxes[:, 1] *= height
-    bounding_boxes[:, 2] *= width
-    bounding_boxes[:, 3] *= height
-
-    return bounding_boxes
+FONT_BOUNDING_BOX = dict(facecolor="white", alpha=0.5, edgecolor="none", pad=-0.1)
+FONT_COLOR = "blue"
+FONT_SIZE = 7
+GROUND_TRUTH_BORDER_COLOR = (1, 0, 0)
 
 
 def save_frame_with_bounding_boxes(load_path, save_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, label_mapping, write_labels=False, write_ground_truth=True, write_detected=True):
@@ -79,7 +66,7 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
     :param write_ground_truth: Whether the images should be saved with ground truth boxes and labels.
     :param test: Whether the dataset is a test dataset.
     """
-    predictions = utils.load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
+    predictions = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
     label_mapping = LABEL_MAPPING
 
     for video_id, video_predictions in predictions.items():
