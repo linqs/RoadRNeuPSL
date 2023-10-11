@@ -204,15 +204,6 @@ class Trainer:
                 all_logits.extend(predictions["logits"].cpu().tolist())
                 all_frame_indexes.extend(frame_ids.cpu().tolist())
 
-                postfix_data = {
-                    "loss": total_loss / ((step + 1) * dataloader.batch_size),
-                    "loss_bce": total_bce_loss / ((step + 1) * dataloader.batch_size),
-                    "loss_giou": total_giou_loss / ((step + 1) * dataloader.batch_size),
-                    "loss_l1": total_l1_loss / ((step + 1) * dataloader.batch_size),
-                }
-
-            tq.set_postfix(**postfix_data)
-
         total_results = {
             "bce_loss": (bce_weight * total_bce_loss) / dataset_size,
             "giou_loss": (giou_weight * total_giou_loss) / dataset_size,

@@ -131,8 +131,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return {}
 
     def internal_fit(self, data, gradients, options={}):
-        self.set_model_application(True)
-
         structured_gradients = float(options["alpha"]) * self.format_batch_gradients(gradients, len(self.current_batch[1]))
 
         self.optimizer.zero_grad(set_to_none=True)
@@ -148,37 +146,35 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return results
 
     def internal_predict(self, data, options={}):
-        self.set_model_application(options["learn"])
-
         frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
 
         self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-        if not options["learn"]:
+        if (self.application == "inference") and (not self._train):
             self.all_frame_indexes.extend(frame_ids.cpu().tolist())
 
         return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
         if self.application == "learning":
-            return {'loss': 0.0}
-
-        self.set_model_application(False)
+            return 0.0
 
         self.format_batch_results(options=options)
 
-        return {'loss': 0.0}
+        return 0.0
 
     def internal_epoch_start(self, options={}):
+        self.all_box_predictions = []
+        self.all_class_predictions = []
+        self.all_frame_indexes = []
+
         self.iterator = iter(self.dataloader)
         self.next_batch()
 
     def internal_epoch_end(self, options={}):
-        if self.scheduler is not None:
-            # Learning
+        if (self.application == "learning") and (self._train):
             self.scheduler.step()
             self.save()
-        else:
-            # Inference
+        elif (self.application == "inference") and (not self._train):
             os.makedirs(self.evaluation_out_dir, exist_ok=True)
             save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
                                    output_dir=self.evaluation_out_dir, from_logits=False)
@@ -198,18 +194,20 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_is_epoch_complete(self, options={}):
         if self.current_batch is None:
-            return {"is_epoch_complete": True}
-        return {"is_epoch_complete": False}
+            return True
+        return False
 
     def internal_save(self, options={}):
         os.makedirs(self.model_out_dir, exist_ok=True)
         save_model_state(self.model, self.model_out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
 
-    def set_model_application(self, learning):
-        if learning:
-            self.model.train()
-        else:
-            self.model.eval()
+    def train_mode(self, options = {}):
+        super().train_mode(options=options)
+        self.model.train()
+
+    def eval_mode(self, options = {}):
+        super().eval_mode(options=options)
+        self.model.eval()
 
     def format_batch_gradients(self, gradients, batch_size, options={}):
         formatted_gradients = torch.zeros(size=(batch_size, NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)

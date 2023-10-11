@@ -216,7 +216,7 @@ def load_csv_file(path, delimiter=','):
         return list(reader)
 
 
-def write_json_file(path, data, indent=0):
+def write_json_file(path, data, indent=4):
     with open(path, "w") as file:
         if indent is None:
             json.dump(data, file)
