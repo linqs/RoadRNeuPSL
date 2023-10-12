@@ -27,7 +27,8 @@
   },
   "infer": {
     "rules": [
-      "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
+      "1.0: Neural(FrameID, BoundingBoxID, Class) & !BoundingBox(Class) & !BoxConfidence(Class) -> Label(FrameID, BoundingBoxID, Class) ^2",
+      "1.0: Label(FrameID, BoundingBoxID, Class) & !BoundingBox(Class) & !BoxConfidence(Class) -> Neural(FrameID, BoundingBoxID, Class) ^2",
 
       "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
 
