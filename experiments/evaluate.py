@@ -1,55 +1,50 @@
 import argparse
 import logging
 import os
-import torch
 import sys
 
-import tqdm
+import torch
+
+from torch.utils.data import DataLoader
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
-import utils
 
-from torch.utils.data import DataLoader
-
-from data.stream_roadr_dataset import RoadRDataset
+from data.roadr_dataset import RoadRDataset
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.analysis import ratio_to_pixel_coordinates
-from models.evaluation import count_violated_pairwise_constraints
+from models.evaluation import count_violated_constraints
 from models.evaluation import filter_detections
-from models.evaluation import format_pairwise_constraints
 from models.evaluation import load_ground_truth_for_detections
 from models.evaluation import mean_average_precision
 from models.trainer import Trainer
+from utils import get_torch_device
+from utils import load_constraint_file
+from utils import load_json_file
+from utils import seed_everything
+from utils import write_json_file
+from utils import write_pkl_file
 from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
-from utils import CONSTRAINTS_PATH
 from utils import EVALUATION_METRICS_FILENAME
-from utils import PREDICTION_LOGITS_JSON_FILENAME
-from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
-from utils import PREDICTION_LOGITS_PKL_FILENAME
-from utils import PREDICTION_LABELS_JSON_FILENAME
-from utils import PREDICTION_LABELS_PKL_FILENAME
+from utils import HARD_CONSTRAINTS_PATH
 from utils import IOU_THRESHOLD
 from utils import LABEL_CONFIDENCE_THRESHOLD
-from utils import NUM_SAVED_IMAGES
-from utils import SEED
-from utils import TRAIN_VALIDATION_DATA_PATH
+from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
-from utils import NEURAL_TEST_INFERENCE_DIR
+from utils import NUM_SAVED_IMAGES
+from utils import PREDICTION_LABELS_JSON_FILENAME
+from utils import PREDICTION_LABELS_PKL_FILENAME
+from utils import PREDICTION_LOGITS_JSON_FILENAME
+from utils import PREDICTION_LOGITS_PKL_FILENAME
+from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
+from utils import SEED
+from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
-
-
-def sigmoid_list_of_logits(logits):
-    return torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
-
-
-def sort_by_confidence(frame_logits, frame_boxes):
-    return zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
 
 
 def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
@@ -65,7 +60,7 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
             logits_with_confidence_output_dict[frame_id[0]] = {}
             labels_output_dict[frame_id[0]] = {}
 
-        frame_logits, frame_boxes = sort_by_confidence(frame_logits, frame_boxes)
+        frame_logits, frame_boxes = zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
         scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize).tolist()
 
         logits_output_dict[frame_id[0]][frame_id[1]] = []
@@ -73,7 +68,7 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
         labels_output_dict[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, scaled_frame_boxes):
             if from_logits:
-                prediction = sigmoid_list_of_logits(logits)
+                prediction = torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
             else:
                 prediction = logits
 
@@ -94,19 +89,19 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
             logits_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction, "bbox": box})
 
     logging.info("Saving pkl prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME))
-    utils.write_pkl_file(os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME), logits_output_dict)
+    write_pkl_file(os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME), logits_output_dict)
 
     logging.info("Saving json prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
-    utils.write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME), logits_output_dict)
+    write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME), logits_output_dict)
 
     logging.info("Saving json prediction logits with confidence to %s" % os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME))
-    utils.write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME), logits_with_confidence_output_dict)
+    write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME), logits_with_confidence_output_dict)
 
     logging.info("Saving pkl prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME))
-    utils.write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), labels_output_dict)
+    write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), labels_output_dict)
 
     logging.info("Saving json prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
-    utils.write_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME), labels_output_dict)
+    write_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME), labels_output_dict)
 
 
 def format_saved_predictions(predictions, dataset):
@@ -142,53 +137,23 @@ def run_neural_inference(dataset, arguments):
     model.load_state_dict(torch.load(arguments.saved_model_path))
 
     logging.info("Running neural inference with trained model {}.".format(arguments.saved_model_path))
-    trainer = Trainer(model, None, None, utils.get_torch_device(), os.path.join(arguments.output_dir))
+    trainer = Trainer(model, None, None, get_torch_device(), os.path.join(arguments.output_dir))
 
-    if arguments.test_evaluation:
-        frame_indexes, boxes, logits = predict_all(model, dataloader)
-    else:
-        frame_indexes, boxes, logits, results = trainer.compute_total_loss(dataloader)
+    frame_indexes, boxes, logits, _ = trainer.eval(dataloader, calculate_loss=False, keep_predictions=True)
 
     save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
-
-
-def predict_all(model, dataloader: DataLoader):
-    """
-    Use the model to make a prediction on all of the provided data.
-    :param dataloader: The data to make predictions on the model on.
-    """
-    model.eval()
-
-    all_box_predictions = []
-    all_logits = []
-    all_frame_indexes = []
-
-    device = utils.get_torch_device()
-
-    with tqdm.tqdm(dataloader) as tq:
-        for step, batch in enumerate(tq):
-            batch = [b.to(device) for b in batch]
-            frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-
-            predictions = model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-
-            all_box_predictions.extend(predictions["pred_boxes"].cpu().tolist())
-            all_logits.extend(predictions["logits"].cpu().tolist())
-            all_frame_indexes.extend(frame_ids.cpu().tolist())
-
-    return all_frame_indexes, all_box_predictions, all_logits
 
 
 def calculate_metrics(dataset, output_dir):
     if os.path.isfile(os.path.join(output_dir, EVALUATION_METRICS_FILENAME)):
         logging.info("Skipping calculation metrics for %s, already exists." % (os.path.join(output_dir, EVALUATION_METRICS_FILENAME),))
 
-        results = utils.load_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
+        results = load_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
         logging.info("Saved metrics: %s" % results)
         return
 
     logging.info("Loading predictions.")
-    predictions = utils.load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
+    predictions = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
     frame_indexes, class_predictions, box_predictions = format_saved_predictions(predictions, dataset)
 
     logging.info("Calculating metrics.")
@@ -200,8 +165,7 @@ def calculate_metrics(dataset, output_dir):
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Counting constraint violations.")
-    pairwise_constraints = format_pairwise_constraints(utils.load_csv_file(CONSTRAINTS_PATH, ','))
-    num_constraint_violations, num_frames_with_violation, constraint_violation_dict = count_violated_pairwise_constraints(class_predictions, pairwise_constraints, positive_threshold=LABEL_CONFIDENCE_THRESHOLD)
+    num_constraint_violations, num_frames_with_violation, constraint_violation_dict = count_violated_constraints(class_predictions, load_constraint_file(HARD_CONSTRAINTS_PATH), positive_threshold=LABEL_CONFIDENCE_THRESHOLD)
     logging.info("Number of constraint violations: {}".format(num_constraint_violations))
     logging.info("Number of frames with constraint violations: {}".format(num_frames_with_violation))
     logging.info("Constraint violation dict: {}".format(constraint_violation_dict))
@@ -214,7 +178,7 @@ def calculate_metrics(dataset, output_dir):
     }
 
     logging.info("Saving metrics to %s" % os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
-    utils.write_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME), metrics)
+    write_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME), metrics)
 
 
 def save_images(dataset, arguments):
@@ -235,7 +199,7 @@ def save_images(dataset, arguments):
 
 
 def main(arguments):
-    utils.seed_everything(arguments.seed)
+    seed_everything(arguments.seed)
 
     logger.initLogging(arguments.log_level)
     logging.info("Beginning evaluating.")

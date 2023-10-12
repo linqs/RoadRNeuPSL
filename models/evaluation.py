@@ -1,9 +1,9 @@
 import torch
 
-from models.analysis import ratio_to_pixel_coordinates
 from torchmetrics.detection import MeanAveragePrecision
 from torchvision.ops import nms
 
+from models.analysis import ratio_to_pixel_coordinates
 from utils import NUM_CLASSES
 
 
@@ -101,26 +101,11 @@ def mean_average_precision(ground_truths, detections, iou_threshold=0.5):
     return float(values['map'])
 
 
-def format_pairwise_constraints(pairwise_constraints):
-    """
-    Formats the pairwise constraints.
-    :param pairwise_constraints:
-    :return: Dictionary containing the pairwise constraints.
-    """
-    formatted_pairwise_constraints = {}
-    for index_i in range(len(pairwise_constraints) - 1):
-        formatted_pairwise_constraints[index_i] = {}
-        for index_j in range(len(pairwise_constraints[index_i]) - 1):
-            formatted_pairwise_constraints[index_i][index_j] = int(pairwise_constraints[index_i + 1][index_j + 1])
-
-    return formatted_pairwise_constraints
-
-
-def count_violated_pairwise_constraints(frame_predictions, constraints, positive_threshold=0.5):
+def count_violated_constraints(frame_predictions, constraints, positive_threshold=0.5):
     """
     Counts the number of violated pairwise constraints.
     :param frame_predictions: List of shape (N, Q, C) containing the predicted frame probabilities.
-    :param constraints: Dictionary of potential violations.
+    :param constraints: List of constraints.
     :param positive_threshold: Threshold for the positive class.
     :return: Number of violated constraints, Number of frames with a violation.
     """
@@ -154,8 +139,7 @@ def count_violated_pairwise_constraints(frame_predictions, constraints, positive
                     has_location = True
 
                 for index_j, class_j in enumerate(class_predictions[index_i + 1:]):
-
-                    if constraints[class_i][class_j] == 1:
+                    if constraints[class_i * NUM_CLASSES + class_j][2] == 1:
                         continue
 
                     if class_i not in constraint_violation_dict:

@@ -11,10 +11,12 @@ from transformers import DetrForObjectDetection
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
-import utils
 
-from data.stream_roadr_dataset import RoadRDataset
+from data.roadr_dataset import RoadRDataset
 from models.trainer import Trainer
+from utils import get_torch_device
+from utils import load_csv_file
+from utils import seed_everything
 from utils import BASE_RESULTS_DIR
 from utils import NUM_CLASSES
 from utils import SEED
@@ -24,15 +26,6 @@ from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_TRAINING_SUMMARY_FILENAME
 from utils import VIDEO_PARTITIONS
 
-
-HYPERPARAMETERS = {
-    "learning-rate": [1.0e-4, 1.0e-5],
-    "weight-decay": [1.0e-5],
-    "batch-size": [2],
-    "step-size": [100],
-    "gamma": [1.0],
-    "epochs": [100]
-}
 
 DEFAULT_PARAMETERS = {
     "learning-rate": 1.0e-5,
@@ -47,13 +40,13 @@ DEFAULT_PARAMETERS = {
 def build_model():
     return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
                                                   num_labels=NUM_CLASSES,
-                                                  ignore_mismatched_sizes=True).to(utils.get_torch_device())
+                                                  ignore_mismatched_sizes=True).to(get_torch_device())
 
 
 def run_setting(arguments, train_dataset, validation_dataset, parameters, parameters_string):
     if os.path.isfile(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
         logging.info("Skipping training for %s, already exists." % (parameters_string,))
-        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
+        return float(load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
     os.makedirs(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string), exist_ok=True)
 
@@ -71,14 +64,14 @@ def run_setting(arguments, train_dataset, validation_dataset, parameters, parame
     optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
 
-    trainer = Trainer(model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
+    trainer = Trainer(model, optimizer, lr_scheduler, get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
     trainer.train(train_dataloader, validation_dataloader, n_epochs=parameters["epochs"])
 
-    return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
+    return float(load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
 
 def main(arguments):
-    utils.seed_everything(arguments.seed)
+    seed_everything(arguments.seed)
 
     logger.initLogging(arguments.log_level)
     logging.info("Beginning pre-training.")
@@ -87,41 +80,13 @@ def main(arguments):
     if torch.cuda.is_available():
         logging.info("Using device: %s" % torch.cuda.get_device_name(torch.cuda.current_device()))
 
-    hyperparameters = utils.enumerate_hyperparameters(HYPERPARAMETERS)
-
-    best_loss = float("inf")
-    best_parameter_string = ""
-    parameter_setting = DEFAULT_PARAMETERS
-
-    if arguments.hyperparameter_search:
-        logging.info("Loading Training Dataset")
-        train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
-                                     max_frames=arguments.max_frames)
-        validation_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["VALID"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
-                                          max_frames=arguments.max_frames)
-
-        for index in range(len(hyperparameters)):
-            hyperparameters_string = ""
-            for key in sorted(hyperparameters[index].keys()):
-                hyperparameters_string = hyperparameters_string + key + ":" + str(hyperparameters[index][key]) + " -- "
-            logging.info("\n%d \ %d -- %s" % (index, len(hyperparameters), hyperparameters_string[:-4]))
-
-            loss = run_setting(arguments, train_dataset, validation_dataset, hyperparameters[index], hyperparameters_string[:-4])
-
-            if loss < best_loss:
-                best_loss = loss
-                best_parameter_string = hyperparameters_string[:-4]
-                parameter_setting = hyperparameters[index]
-
-            logging.info("Best hyperparameter setting: %s with loss %f" % (best_parameter_string, best_loss))
-
     logging.info("Loading Training Dataset")
     train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
                                  max_frames=arguments.max_frames)
     validation_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["VALID"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
                                       max_frames=arguments.max_frames)
 
-    loss = run_setting(arguments, train_dataset, validation_dataset, parameter_setting, NEURAL_TRAINED_MODEL_DIR)
+    loss = run_setting(arguments, train_dataset, validation_dataset, DEFAULT_PARAMETERS, NEURAL_TRAINED_MODEL_DIR)
     logging.info("Final loss: %f" % (loss,))
 
 
@@ -141,9 +106,6 @@ def _load_args():
     parser.add_argument("--max-frames", dest="max_frames",
                         action="store", type=int, default=0,
                         help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
-    parser.add_argument("--hyperparameter-search", dest="hyperparameter_search",
-                        action="store", type=bool, default=False,
-                        help="Run hyperparameter search.")
     parser.add_argument("--resume-from-checkpoint", dest="resume_from_checkpoint",
                         action="store", type=bool, default=False,
                         help="Resume training from the most recent checkpoint.")

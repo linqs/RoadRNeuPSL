@@ -12,36 +12,34 @@ from torch.utils.data import DataLoader
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
-import utils
 
-from data.stream_roadr_dataset import RoadRDataset
-from experiments.evaluate import save_logits_and_labels
+from data.roadr_dataset import RoadRDataset
 from experiments.evaluate import calculate_metrics
+from experiments.evaluate import save_logits_and_labels
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
-from models.hungarian_match import hungarian_match
-from models.losses import binary_cross_entropy_with_logits
-from models.losses import pairwise_generalized_box_iou
-from models.losses import pairwise_l1_loss
-from models.model_utils import save_model_state
+from models.losses import detr_loss
+from utils import get_torch_device
+from utils import save_model_state
+from utils import seed_everything
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import LABEL_CONFIDENCE_THRESHOLD
+from utils import NEUPSL_TEST_INFERENCE_DIR
+from utils import NEUPSL_TRAINED_MODEL_DIR
+from utils import NEUPSL_TRAINED_MODEL_FILENAME
+from utils import NEUPSL_VALID_INFERENCE_DIR
+from utils import NEURAL_TEST_INFERENCE_DIR
+from utils import NEURAL_TRAINED_MODEL_DIR
+from utils import NEURAL_TRAINED_MODEL_FILENAME
+from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
+from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
-from utils import NEURAL_TRAINED_MODEL_DIR
-from utils import NEURAL_TRAINED_MODEL_FILENAME
-from utils import NEURAL_VALID_INFERENCE_DIR
-from utils import NEURAL_TEST_INFERENCE_DIR
-from utils import NEUPSL_TRAINED_MODEL_DIR
-from utils import NEUPSL_TRAINED_MODEL_FILENAME
-from utils import NEUPSL_VALID_INFERENCE_DIR
-from utils import NEUPSL_TEST_INFERENCE_DIR
-from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
 from utils import VIDEO_PARTITIONS
 
 
@@ -73,7 +71,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.all_class_predictions = []
         self.all_frame_indexes = []
 
-        utils.seed_everything(SEED)
+        seed_everything(SEED)
         logger.initLogging(logging_level=logging.INFO)
 
     def internal_init(self, application, options={}):
@@ -131,7 +129,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             logging.info("Loading model from: {0}".format(trained_model_path))
 
             if options["load-predictions"] == "false":
-                self.model.load_state_dict(torch.load(trained_model_path, map_location=utils.get_torch_device()))
+                self.model.load_state_dict(torch.load(trained_model_path, map_location=get_torch_device()))
 
             annotation_path = TRAIN_VALIDATION_DATA_PATH if options["inference_split"] == "VALID" else None
             self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], annotation_path, float(options["image-resize"]),
@@ -151,7 +149,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.optimizer.zero_grad(set_to_none=True)
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
 
-        loss, results = self._compute_loss(self.gpu_batch)
+        frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
+        loss, results = detr_loss(self.batch_predictions["pred_boxes"], self.batch_predictions["logits"], boxes, labels)
+
         loss = (1 - float(options["alpha"])) * loss
         loss.backward(retain_graph=True)
 
@@ -212,7 +212,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
         if self.current_batch is not None:
-            self.gpu_batch = [b.to(utils.get_torch_device()) for b in self.current_batch]
+            self.gpu_batch = [b.to(get_torch_device()) for b in self.current_batch]
 
     def internal_is_epoch_complete(self, options={}):
         if self.current_batch is None:
@@ -245,7 +245,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             for class_index in range(len(gradients[gradient_index][:-5])):
                 formatted_gradients[batch_index][query_index][class_index] = float(gradients[gradient_index][class_index])
 
-        return formatted_gradients.to(utils.get_torch_device())
+        return formatted_gradients.to(get_torch_device())
 
     def format_batch_predictions(self, logits, boxes, options={}):
         self.batch_predictions_formatted = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
@@ -286,31 +286,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.all_box_predictions.extend(box_predictions.tolist())
         self.all_class_predictions.extend(class_predictions.tolist())
-
-    def _compute_loss(self, data, bce_weight: int = 1, giou_weight: int = 5, l1_weight: int = 2):
-        frame_indexes, pixel_values, pixel_mask, labels, boxes = data
-
-        # Compute the training loss.
-        # For the training loss, we need to first compute the matching between the predictions and the ground truth.
-        matching = hungarian_match(self.batch_predictions["pred_boxes"], boxes)
-
-        # Compute the classification loss using the matching.
-        bce_loss = binary_cross_entropy_with_logits(self.batch_predictions["logits"], labels, matching)
-
-        # Compute the bounding box loss using the matching.
-        giou_loss = pairwise_generalized_box_iou(self.batch_predictions["pred_boxes"], boxes, matching)
-
-        # Compute the bounding box l2 loss using the matching.
-        l1_loss = pairwise_l1_loss(self.batch_predictions["pred_boxes"], boxes, matching)
-
-        results = {
-            "bce_loss": bce_loss.item(),
-            "giou_loss": giou_loss.item(),
-            "l1_loss": l1_loss.item(),
-            "loss": (bce_weight * bce_loss + giou_weight * giou_loss + l1_weight * l1_loss).item()
-        }
-
-        return bce_weight * bce_loss + giou_weight * giou_loss + l1_weight * l1_loss, results
 
     def post_gradient_computation(self):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
