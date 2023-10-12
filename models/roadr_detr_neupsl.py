@@ -20,6 +20,7 @@ from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.losses import detr_loss
 from utils import get_torch_device
+from utils import load_json_file
 from utils import save_model_state
 from utils import seed_everything
 from utils import BASE_CLI_DIR
@@ -294,7 +295,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 class LoadPredictionsModel:
     def __init__(self, predictions_path):
         self.predictions_path = predictions_path
-        self.predictions = utils.load_json_file(self.predictions_path)
+        self.predictions = load_json_file(self.predictions_path)
 
     def load_predictions(self, frame_ids):
         frame_predictions = {"logits": [], "pred_boxes": []}
