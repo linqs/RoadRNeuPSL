@@ -23,7 +23,6 @@ class Trainer:
         self.scheduler = scheduler
         self.device = device
         self.out_directory = out_directory
-        self.batch_predictions = None
 
     def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader, n_epochs: int = 500, compute_period: int = 1):
         """
@@ -54,27 +53,21 @@ class Trainer:
             epoch_giou_loss = 0
             epoch_l1_loss = 0
 
-            current_epoch_boxes = []
-            current_epoch_logits = []
-
             with tqdm.tqdm(training_dataloader) as tq:
                 tq.set_description("Epoch:{}".format(epoch))
                 for step, batch in enumerate(tq):
-                    batch = [b.to(self.device) for b in batch]
-
                     self.optimizer.zero_grad(set_to_none=True)
 
+                    batch = [b.to(self.device) for b in batch]
+
                     frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-                    self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-                    loss, results = detr_loss(self.batch_predictions["pred_boxes"], self.batch_predictions["logits"], boxes, labels)
+                    batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+                    loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
 
                     epoch_loss += loss.item()
                     epoch_bce_loss += results["bce_loss"] * results["bce_weight"]
                     epoch_giou_loss += results["giou_loss"] * results["giou_weight"]
                     epoch_l1_loss += results["l1_loss"] * results["l1_weight"]
-
-                    current_epoch_boxes.extend(self.batch_predictions["pred_boxes"].cpu().tolist())
-                    current_epoch_logits.extend(self.batch_predictions["logits"].cpu().tolist())
 
                     loss.backward()
                     self.post_gradient_computation()
@@ -141,10 +134,11 @@ class Trainer:
                 validation_results["l1_loss"],
                 total_time, max_gpu_mem))
 
-    def compute_total_loss(self, dataloader: DataLoader):
+    def evaluate(self, dataloader: DataLoader, calculate_loss: bool = True):
         """
         Evaluate the model on the provided data.
         :param dataloader: The data to evaluate the model on.
+        :param calculate_loss: (Optional) Whether to calculate the loss on the provided data.
         :return: The predictions and the losses for the predictions on the provided data.
         """
         self.model.eval()
@@ -167,20 +161,17 @@ class Trainer:
                 batch = [b.to(self.device) for b in batch]
 
                 frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-                self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-                loss, results = detr_loss(self.batch_predictions["pred_boxes"], self.batch_predictions["logits"], boxes, labels)
+                batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+                if calculate_loss:
+                    loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
 
-                total_loss += loss.item()
-                total_bce_loss += results["bce_loss"] * results["bce_weight"]
-                total_giou_loss += results["giou_loss"] * results["giou_weight"]
-                total_l1_loss += results["l1_loss"] * results["l1_weight"]
+                    total_loss += loss.item()
+                    total_bce_loss += results["bce_loss"] * results["bce_weight"]
+                    total_giou_loss += results["giou_loss"] * results["giou_weight"]
+                    total_l1_loss += results["l1_loss"] * results["l1_weight"]
 
-                frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-
-                predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-
-                all_box_predictions.extend(predictions["pred_boxes"].cpu().tolist())
-                all_logits.extend(predictions["logits"].cpu().tolist())
+                all_box_predictions.extend(batch_predictions["pred_boxes"].cpu().tolist())
+                all_logits.extend(batch_predictions["logits"].cpu().tolist())
                 all_frame_indexes.extend(frame_ids.cpu().tolist())
 
         total_results = {
@@ -191,6 +182,31 @@ class Trainer:
         }
 
         return all_frame_indexes, all_box_predictions, all_logits, total_results
+
+    def predict_batch(self, batch, calculate_loss: bool = True, return_predictions: bool = True):
+        """
+        Predict on a batch of data.
+        :param batch: The batch of data to predict on.
+        :param calculate_loss: (Optional) Whether to calculate the loss on the provided data.
+        :param return_predictions: (Optional) Whether to return the predictions.
+        :return: The predictions and the losses for the predictions on the provided data.
+        """
+        self.model.eval()
+
+        batch = [b.to(self.device) for b in batch]
+
+        frame_ids, pixel_values, pixel_mask, labels, boxes = batch
+        batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+        if calculate_loss:
+            loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
+        else:
+            loss = None
+            results = None
+
+        if return_predictions:
+            return batch_predictions["pred_boxes"], batch_predictions["logits"], loss, results
+        else:
+            return loss, results
 
     def post_gradient_computation(self):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
