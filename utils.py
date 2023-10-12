@@ -24,6 +24,7 @@ CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrenc
 EXPERIMENT_SUMMARY_FILENAME = "experiment_summary.csv"
 EVALUATION_SUMMARY_FILENAME = "evaluation_summary.json"
 PREDICTION_LOGITS_JSON_FILENAME = "prediction_logits.json"
+PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME = "prediction_logits_with_confidence.json"
 PREDICTION_LOGITS_PKL_FILENAME = "prediction_logits.pkl"
 PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
 PREDICTION_LABELS_PKL_FILENAME = "prediction_labels.pkl"

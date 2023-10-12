@@ -129,6 +129,7 @@ def set_neural_predicate_options(psl_json, arguments):
     psl_json["predicates"]["Neural/3"]["options"]["max-frames"] = arguments.max_frames
     psl_json["predicates"]["Neural/3"]["options"]["evaluation-dir-name"] = arguments.evaluation_dir_name
     psl_json["predicates"]["Neural/3"]["options"]["use-neural-trained-model"] = arguments.use_neural_trained_model
+    psl_json["predicates"]["Neural/3"]["options"]["load-predictions"] = arguments.load_predictions
 
 
 def set_runtime_task(psl_json, learning, inference):
@@ -189,6 +190,9 @@ def _load_args():
     parser.add_argument("--test-inference", dest="test_inference",
                         action="store_true", default=False,
                         help="Run inference on the test set.")
+    parser.add_argument("--load-predictions", dest="load_predictions",
+                        action="store_true", default=False,
+                        help="Load predictions from file.")
 
     arguments = parser.parse_args()
 

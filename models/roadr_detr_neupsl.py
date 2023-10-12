@@ -35,10 +35,13 @@ from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
+from utils import NEURAL_VALID_INFERENCE_DIR
+from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import NEUPSL_TRAINED_MODEL_DIR
 from utils import NEUPSL_TRAINED_MODEL_FILENAME
 from utils import NEUPSL_VALID_INFERENCE_DIR
 from utils import NEUPSL_TEST_INFERENCE_DIR
+from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
 from utils import VIDEO_PARTITIONS
 
 
@@ -79,7 +82,17 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.model_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR)
 
-        self.model = build_model()
+        if options["load-predictions"] == "true":
+            assert self.application != "learning"
+            if (options["inference_split"] == "VALID"):
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME)
+            elif (options["inference_split"] == "TEST"):
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME)
+            else:
+                raise ValueError("Invalid inference split: {0}".format(options["inference_split"]))
+            self.model = LoadPredictionsModel(predictions_path)
+        else:
+            self.model = build_model()
 
         neural_trained_model_path = os.path.join(BASE_RESULTS_DIR, options["task-name"],
                                                  NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
@@ -117,7 +130,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
             logging.info("Loading model from: {0}".format(trained_model_path))
 
-            self.model.load_state_dict(torch.load(trained_model_path, map_location=utils.get_torch_device()))
+            if options["load-predictions"] == "false":
+                self.model.load_state_dict(torch.load(trained_model_path, map_location=utils.get_torch_device()))
+
             annotation_path = TRAIN_VALIDATION_DATA_PATH if options["inference_split"] == "VALID" else None
             self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], annotation_path, float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]), test=(options["inference_split"] == "TEST"))
@@ -146,11 +161,18 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return results
 
     def internal_predict(self, data, options={}):
-        frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
+        frame_indexes, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
 
-        self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+        if options["load-predictions"] == "true":
+            frame_ids = []
+            for frame_index in frame_indexes:
+                frame_ids.append(self.dataset.get_frame_id(frame_index))
+            self.batch_predictions = self.model.load_predictions(frame_ids)
+        else:
+            self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+
         if (self.application == "inference") and (not self._train):
-            self.all_frame_indexes.extend(frame_ids.cpu().tolist())
+            self.all_frame_indexes.extend(frame_indexes.cpu().tolist())
 
         return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
 
@@ -266,7 +288,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.all_class_predictions.extend(class_predictions.tolist())
 
     def _compute_loss(self, data, bce_weight: int = 1, giou_weight: int = 5, l1_weight: int = 2):
-        frame_ids, pixel_values, pixel_mask, labels, boxes = data
+        frame_indexes, pixel_values, pixel_mask, labels, boxes = data
 
         # Compute the training loss.
         # For the training loss, we need to first compute the matching between the predictions and the ground truth.
@@ -292,3 +314,29 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def post_gradient_computation(self):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+
+
+class LoadPredictionsModel:
+    def __init__(self, predictions_path):
+        self.predictions_path = predictions_path
+        self.predictions = utils.load_json_file(self.predictions_path)
+
+    def load_predictions(self, frame_ids):
+        frame_predictions = {"logits": [], "pred_boxes": []}
+        for batch_frame_index in range(len(frame_ids)):
+            frame_id = frame_ids[batch_frame_index]
+            frame_predictions["logits"].append([])
+            frame_predictions["pred_boxes"].append([])
+            for box in range(len(self.predictions[frame_id[0]][frame_id[1]])):
+                frame_predictions["logits"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["labels"])
+                frame_predictions["pred_boxes"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["bbox"])
+
+        frame_predictions["logits"] = torch.tensor(frame_predictions["logits"], dtype=torch.float32)
+        frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32)
+        return frame_predictions
+
+    def eval(self):
+        pass
+
+    def train(self):
+        pass

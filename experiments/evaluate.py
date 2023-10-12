@@ -28,6 +28,7 @@ from utils import BOX_CONFIDENCE_THRESHOLD
 from utils import CONSTRAINTS_PATH
 from utils import EVALUATION_METRICS_FILENAME
 from utils import PREDICTION_LOGITS_JSON_FILENAME
+from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
 from utils import PREDICTION_LOGITS_PKL_FILENAME
 from utils import PREDICTION_LABELS_JSON_FILENAME
 from utils import PREDICTION_LABELS_PKL_FILENAME
@@ -53,6 +54,7 @@ def sort_by_confidence(frame_logits, frame_boxes):
 
 def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
     logits_output_dict = {}
+    logits_with_confidence_output_dict = {}
     labels_output_dict = {}
 
     for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
@@ -60,12 +62,14 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
 
         if frame_id[0] not in logits_output_dict:
             logits_output_dict[frame_id[0]] = {}
+            logits_with_confidence_output_dict[frame_id[0]] = {}
             labels_output_dict[frame_id[0]] = {}
 
         frame_logits, frame_boxes = sort_by_confidence(frame_logits, frame_boxes)
         scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize).tolist()
 
         logits_output_dict[frame_id[0]][frame_id[1]] = []
+        logits_with_confidence_output_dict[frame_id[0]][frame_id[1]] = []
         labels_output_dict[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, scaled_frame_boxes):
             if from_logits:
@@ -87,11 +91,16 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
                 logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": [], "bbox": box})
 
+            logits_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction, "bbox": box})
+
     logging.info("Saving pkl prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME))
     utils.write_pkl_file(os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME), logits_output_dict)
 
     logging.info("Saving json prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
     utils.write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME), logits_output_dict)
+
+    logging.info("Saving json prediction logits with confidence to %s" % os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME))
+    utils.write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME), logits_with_confidence_output_dict)
 
     logging.info("Saving pkl prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME))
     utils.write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), labels_output_dict)

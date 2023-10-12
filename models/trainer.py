@@ -128,6 +128,9 @@ class Trainer:
 
                 save_model_state(self.model, self.out_directory, "epoch_{}_".format(epoch) + NEURAL_TRAINED_MODEL_FILENAME)
 
+                if (epoch == n_epochs - 1):
+                    save_model_state(self.model, self.out_directory, NEURAL_TRAINED_MODEL_FILENAME)
+
                 _, _, _, validation_results = self.compute_total_loss(validation_dataloader)
                 validation_convergence += "{:5d}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
                     epoch, total_time, epoch_time, validation_results["loss"],
