@@ -20,8 +20,10 @@ PSL_DATA_DIR = os.path.join(THIS_DIR, "psl-data")
 LOGGING_LEVEL = logging.INFO
 CONFIG_FILENAME = "config.json"
 
-AGENT_CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-BOUNDING_BOX_CLASSES = [41, 42, 43, 44, 45]
+AGENT_CLASSES = [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]]
+AGENT_NO_TL_CLASSES = [[0], [1], [2], [3], [4], [5], [6], [7]]
+BOUNDING_BOX_CLASSES = [[41], [42], [43], [44], [45]]
+LOCATION_CLASSES = [[29], [30], [31], [32], [33], [34], [35], [36], [37], [38], [39], [40]]
 
 
 def generate_experiment(experiment_dir, tube_size):
@@ -31,14 +33,6 @@ def generate_experiment(experiment_dir, tube_size):
     for tube_index in range(tube_size):
         for bounding_box_index in range(NUM_NEUPSL_QUERIES):
             entity_data_map.append([tube_index, bounding_box_index])
-
-    agent_classes = []
-    for agent_class in AGENT_CLASSES:
-        agent_classes.append([agent_class])
-
-    bounding_box_classes = []
-    for bounding_box_class in BOUNDING_BOX_CLASSES:
-        bounding_box_classes.append([bounding_box_class])
 
     entity_targets = []
     linked_frames = []
@@ -66,8 +60,10 @@ def generate_experiment(experiment_dir, tube_size):
     soft_co_occurrence = load_constraint_file(SOFT_CONSTRAINTS_PATH)
 
     utils.write_psl_file(os.path.join(experiment_dir, "entity-data-map.txt"), entity_data_map)
-    utils.write_psl_file(os.path.join(experiment_dir, "classes-agent.txt"), agent_classes)
-    utils.write_psl_file(os.path.join(experiment_dir, "classes-bounding-box.txt"), bounding_box_classes)
+    utils.write_psl_file(os.path.join(experiment_dir, "classes-agent.txt"), AGENT_CLASSES)
+    utils.write_psl_file(os.path.join(experiment_dir, "classes-agent-no-tl.txt"), AGENT_NO_TL_CLASSES)
+    utils.write_psl_file(os.path.join(experiment_dir, "classes-bounding-box.txt"), BOUNDING_BOX_CLASSES)
+    utils.write_psl_file(os.path.join(experiment_dir, "classes-location.txt"), LOCATION_CLASSES)
     utils.write_psl_file(os.path.join(experiment_dir, "entity-targets.txt"), entity_targets)
     utils.write_psl_file(os.path.join(experiment_dir, "linked-frame.txt"), linked_frames)
     utils.write_psl_file(os.path.join(experiment_dir, "same-box-targets.txt"), same_box_targets)

@@ -4,7 +4,6 @@ import os
 import sys
 
 import torch
-import tqdm
 
 from torch.utils.data import DataLoader
 

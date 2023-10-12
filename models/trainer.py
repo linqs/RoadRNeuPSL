@@ -90,14 +90,14 @@ class Trainer:
             epoch_time = time.time() - epoch_start_time
             total_time += epoch_time
 
-            learning_convergence += "{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
-                total_time, epoch_time, epoch_loss / dataset_size,
+            learning_convergence += "{:5d}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
+                epoch, total_time, epoch_time, epoch_loss / dataset_size,
                 epoch_bce_loss / dataset_size, epoch_giou_loss / dataset_size,
                 epoch_l1_loss / dataset_size)
 
             if (epoch % compute_period == 0) or (epoch == n_epochs - 1):
                 with open(os.path.join(self.out_directory, NEURAL_TRAINING_CONVERGENCE_FILENAME), "w") as training_convergence_checkpoint_file:
-                    training_convergence_checkpoint_file.write("Total Time(s), Epoch Time(s), Total Loss, BCE Loss, GIOU Loss, L1 Loss\n")
+                    training_convergence_checkpoint_file.write("Epoch, Total Time(s), Epoch Time(s), Total Loss, BCE Loss, GIOU Loss, L1 Loss\n")
                     training_convergence_checkpoint_file.write(learning_convergence)
 
                 save_model_state(self.model, self.out_directory, "epoch_{}_".format(epoch) + NEURAL_TRAINED_MODEL_FILENAME)
