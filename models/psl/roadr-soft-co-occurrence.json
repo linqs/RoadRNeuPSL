@@ -33,7 +33,9 @@
       "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
       "1.0: Label(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) -> !Label(FrameID, BoundingBoxID, Class2) ^2",
 
-      "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}"
+      "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}",
+      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') . {Class: Location(Class)}",
+      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}"
     ]
   },
   "predicates": {
@@ -113,6 +115,16 @@
         ],
         "infer": [
           "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+        ]
+      }
+    },
+    "Location/1": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-2/classes-location.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-2/classes-location.txt"
         ]
       }
     }

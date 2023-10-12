@@ -24,7 +24,7 @@ class Trainer:
         self.device = device
         self.out_directory = out_directory
 
-    def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader, n_epochs: int = 500, compute_period: int = 1):
+    def train(self, training_dataloader: DataLoader, validation_dataloader: DataLoader, n_epochs: int = 500, compute_period: int = 2):
         """
         Train the provided model and log training performance.
         :param training_dataloader: The training data to use for training.

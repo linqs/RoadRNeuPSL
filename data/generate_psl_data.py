@@ -21,7 +21,6 @@ LOGGING_LEVEL = logging.INFO
 CONFIG_FILENAME = "config.json"
 
 AGENT_CLASSES = [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]]
-AGENT_NO_TL_CLASSES = [[0], [1], [2], [3], [4], [5], [6], [7]]
 BOUNDING_BOX_CLASSES = [[41], [42], [43], [44], [45]]
 LOCATION_CLASSES = [[29], [30], [31], [32], [33], [34], [35], [36], [37], [38], [39], [40]]
 
@@ -61,7 +60,6 @@ def generate_experiment(experiment_dir, tube_size):
 
     utils.write_psl_file(os.path.join(experiment_dir, "entity-data-map.txt"), entity_data_map)
     utils.write_psl_file(os.path.join(experiment_dir, "classes-agent.txt"), AGENT_CLASSES)
-    utils.write_psl_file(os.path.join(experiment_dir, "classes-agent-no-tl.txt"), AGENT_NO_TL_CLASSES)
     utils.write_psl_file(os.path.join(experiment_dir, "classes-bounding-box.txt"), BOUNDING_BOX_CLASSES)
     utils.write_psl_file(os.path.join(experiment_dir, "classes-location.txt"), LOCATION_CLASSES)
     utils.write_psl_file(os.path.join(experiment_dir, "entity-targets.txt"), entity_targets)
