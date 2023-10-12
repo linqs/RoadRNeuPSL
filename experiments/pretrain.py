@@ -11,10 +11,12 @@ from transformers import DetrForObjectDetection
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
-import utils
 
 from data.roadr_dataset import RoadRDataset
 from models.trainer import Trainer
+from utils import get_torch_device
+from utils import load_csv_file
+from utils import seed_everything
 from utils import BASE_RESULTS_DIR
 from utils import NUM_CLASSES
 from utils import SEED
@@ -38,13 +40,13 @@ DEFAULT_PARAMETERS = {
 def build_model():
     return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
                                                   num_labels=NUM_CLASSES,
-                                                  ignore_mismatched_sizes=True).to(utils.get_torch_device())
+                                                  ignore_mismatched_sizes=True).to(get_torch_device())
 
 
 def run_setting(arguments, train_dataset, validation_dataset, parameters, parameters_string):
     if os.path.isfile(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
         logging.info("Skipping training for %s, already exists." % (parameters_string,))
-        return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
+        return float(load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
     os.makedirs(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string), exist_ok=True)
 
@@ -62,14 +64,14 @@ def run_setting(arguments, train_dataset, validation_dataset, parameters, parame
     optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
 
-    trainer = Trainer(model, optimizer, lr_scheduler, utils.get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
+    trainer = Trainer(model, optimizer, lr_scheduler, get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
     trainer.train(train_dataloader, validation_dataloader, n_epochs=parameters["epochs"])
 
-    return float(utils.load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
+    return float(load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
 
 def main(arguments):
-    utils.seed_everything(arguments.seed)
+    seed_everything(arguments.seed)
 
     logger.initLogging(arguments.log_level)
     logging.info("Beginning pre-training.")

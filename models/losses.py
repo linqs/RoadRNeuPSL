@@ -113,10 +113,12 @@ def generalized_box_iou(boxes1, boxes2):
     :param boxes2: Tensor of shape [M, 4]
     :return: A [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
+    assert not torch.isnan(boxes1).any()
+    assert not torch.isnan(boxes2).any()
+
     assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
     assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+
     iou, union = box_iou(boxes1, boxes2)
 
     lt = torch.min(boxes1[:, None, :2], boxes2[:, :2])

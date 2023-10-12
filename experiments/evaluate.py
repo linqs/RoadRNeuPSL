@@ -6,11 +6,11 @@ import sys
 import torch
 import tqdm
 
+from torch.utils.data import DataLoader
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
-
-from torch.utils.data import DataLoader
 
 from data.roadr_dataset import RoadRDataset
 from experiments.pretrain import build_model
@@ -29,30 +29,22 @@ from utils import write_json_file
 from utils import write_pkl_file
 from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
-from utils import HARD_CONSTRAINTS_PATH
 from utils import EVALUATION_METRICS_FILENAME
-from utils import PREDICTION_LOGITS_JSON_FILENAME
-from utils import PREDICTION_LOGITS_PKL_FILENAME
-from utils import PREDICTION_LABELS_JSON_FILENAME
-from utils import PREDICTION_LABELS_PKL_FILENAME
+from utils import HARD_CONSTRAINTS_PATH
 from utils import IOU_THRESHOLD
 from utils import LABEL_CONFIDENCE_THRESHOLD
-from utils import NUM_SAVED_IMAGES
-from utils import SEED
-from utils import TRAIN_VALIDATION_DATA_PATH
+from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
-from utils import NEURAL_TEST_INFERENCE_DIR
+from utils import NUM_SAVED_IMAGES
+from utils import PREDICTION_LABELS_JSON_FILENAME
+from utils import PREDICTION_LABELS_PKL_FILENAME
+from utils import PREDICTION_LOGITS_JSON_FILENAME
+from utils import PREDICTION_LOGITS_PKL_FILENAME
+from utils import SEED
+from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
-
-
-def sigmoid_list_of_logits(logits):
-    return torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
-
-
-def sort_by_confidence(frame_logits, frame_boxes):
-    return zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
 
 
 def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
@@ -66,14 +58,14 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
             logits_output_dict[frame_id[0]] = {}
             labels_output_dict[frame_id[0]] = {}
 
-        frame_logits, frame_boxes = sort_by_confidence(frame_logits, frame_boxes)
+        frame_logits, frame_boxes = zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
         scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize).tolist()
 
         logits_output_dict[frame_id[0]][frame_id[1]] = []
         labels_output_dict[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, scaled_frame_boxes):
             if from_logits:
-                prediction = sigmoid_list_of_logits(logits)
+                prediction = torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
             else:
                 prediction = logits
 
@@ -139,39 +131,9 @@ def run_neural_inference(dataset, arguments):
     logging.info("Running neural inference with trained model {}.".format(arguments.saved_model_path))
     trainer = Trainer(model, None, None, get_torch_device(), os.path.join(arguments.output_dir))
 
-    if arguments.test_evaluation:
-        frame_indexes, boxes, logits = predict_all(model, dataloader)
-    else:
-        frame_indexes, boxes, logits, results = trainer.compute_total_loss(dataloader)
+    frame_indexes, boxes, logits, _ = trainer.eval(dataloader, calculate_loss=False, keep_predictions=True)
 
     save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
-
-
-def predict_all(model, dataloader: DataLoader):
-    """
-    Use the model to make a prediction on all of the provided data.
-    :param dataloader: The data to make predictions on the model on.
-    """
-    model.eval()
-
-    all_box_predictions = []
-    all_logits = []
-    all_frame_indexes = []
-
-    device = get_torch_device()
-
-    with tqdm.tqdm(dataloader) as tq:
-        for step, batch in enumerate(tq):
-            batch = [b.to(device) for b in batch]
-            frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-
-            predictions = model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-
-            all_box_predictions.extend(predictions["pred_boxes"].cpu().tolist())
-            all_logits.extend(predictions["logits"].cpu().tolist())
-            all_frame_indexes.extend(frame_ids.cpu().tolist())
-
-    return all_frame_indexes, all_box_predictions, all_logits
 
 
 def calculate_metrics(dataset, output_dir):

@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import os
 import sys
@@ -8,6 +7,7 @@ import torch
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
+
 from utils import load_json_file
 from utils import write_json_file
 from utils import BASE_CLI_DIR

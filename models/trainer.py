@@ -42,6 +42,7 @@ class Trainer:
         epoch_bce_loss = 0
         epoch_giou_loss = 0
         epoch_l1_loss = 0
+        validation_results = None
 
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
@@ -62,6 +63,7 @@ class Trainer:
 
                     frame_ids, pixel_values, pixel_mask, labels, boxes = batch
                     batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+
                     loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
 
                     epoch_loss += loss.item()
@@ -100,7 +102,7 @@ class Trainer:
 
                 save_model_state(self.model, self.out_directory, "epoch_{}_".format(epoch) + NEURAL_TRAINED_MODEL_FILENAME)
 
-                _, _, _, validation_results = self.compute_total_loss(validation_dataloader)
+                _, _, _, validation_results = self.eval(validation_dataloader, calculate_loss=True, keep_predictions=False)
                 validation_convergence += "{:5d}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f} \n".format(
                     epoch, total_time, epoch_time, validation_results["loss"],
                     validation_results["bce_loss"], validation_results["giou_loss"],
@@ -124,7 +126,6 @@ class Trainer:
                 epoch_l1_loss / dataset_size,
                 total_time, max_gpu_mem))
 
-        _, _, _, validation_results = self.compute_total_loss(validation_dataloader)
         with open(os.path.join(self.out_directory, NEURAL_VALIDATION_SUMMARY_FILENAME), "w") as validation_summary_file:
             validation_summary_file.write("Total Loss, BCE Loss, GIOU Loss, L1 Loss, Total Time(s), Max GPU memory (B)\n")
             validation_summary_file.write("{:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:d}".format(
@@ -134,7 +135,7 @@ class Trainer:
                 validation_results["l1_loss"],
                 total_time, max_gpu_mem))
 
-    def evaluate(self, dataloader: DataLoader, calculate_loss: bool = True):
+    def eval(self, dataloader: DataLoader, calculate_loss: bool = False, keep_predictions: bool = False):
         """
         Evaluate the model on the provided data.
         :param dataloader: The data to evaluate the model on.
@@ -162,17 +163,19 @@ class Trainer:
 
                 frame_ids, pixel_values, pixel_mask, labels, boxes = batch
                 batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-                if calculate_loss:
-                    loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
 
-                    total_loss += loss.item()
+                if calculate_loss:
+                    _, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
+
+                    total_loss += results["loss"]
                     total_bce_loss += results["bce_loss"] * results["bce_weight"]
                     total_giou_loss += results["giou_loss"] * results["giou_weight"]
                     total_l1_loss += results["l1_loss"] * results["l1_weight"]
 
-                all_box_predictions.extend(batch_predictions["pred_boxes"].cpu().tolist())
-                all_logits.extend(batch_predictions["logits"].cpu().tolist())
-                all_frame_indexes.extend(frame_ids.cpu().tolist())
+                if keep_predictions:
+                    all_box_predictions.extend(batch_predictions["pred_boxes"].cpu().tolist())
+                    all_logits.extend(batch_predictions["logits"].cpu().tolist())
+                    all_frame_indexes.extend(frame_ids.cpu().tolist())
 
         total_results = {
             "bce_loss": total_bce_loss / dataset_size,
@@ -182,31 +185,6 @@ class Trainer:
         }
 
         return all_frame_indexes, all_box_predictions, all_logits, total_results
-
-    def predict_batch(self, batch, calculate_loss: bool = True, return_predictions: bool = True):
-        """
-        Predict on a batch of data.
-        :param batch: The batch of data to predict on.
-        :param calculate_loss: (Optional) Whether to calculate the loss on the provided data.
-        :param return_predictions: (Optional) Whether to return the predictions.
-        :return: The predictions and the losses for the predictions on the provided data.
-        """
-        self.model.eval()
-
-        batch = [b.to(self.device) for b in batch]
-
-        frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-        batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-        if calculate_loss:
-            loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
-        else:
-            loss = None
-            results = None
-
-        if return_predictions:
-            return batch_predictions["pred_boxes"], batch_predictions["logits"], loss, results
-        else:
-            return loss, results
 
     def post_gradient_computation(self):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
