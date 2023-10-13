@@ -39,7 +39,7 @@ from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
-from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
+from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
@@ -85,9 +85,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         if options["load-predictions"] == "true":
             assert self.application != "learning"
             if (options["inference_split"] == "VALID"):
-                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME)
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
             elif (options["inference_split"] == "TEST"):
-                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME)
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
             else:
                 raise ValueError("Invalid inference split: {0}".format(options["inference_split"]))
             self.model = LoadPredictionsModel(predictions_path)
@@ -253,11 +253,14 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.batch_predictions_formatted = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
         batch_predictions_sorted_indexes = torch.argsort(logits[:, :, -1], descending=True)
-        batch_predictions = torch.cat((torch.sigmoid(logits), boxes), dim=-1)
 
-        for batch_index in range(len(batch_predictions)):
+        batch_prediction_probabilities = torch.sigmoid(logits)
+        batch_predictions = torch.cat((batch_prediction_probabilities,
+                                       torch.zeros(size=boxes.shape, dtype=torch.float32)), dim=-1)
+
+        for batch_index in range(len(batch_prediction_probabilities)):
             for box_index in range(NUM_NEUPSL_QUERIES):
-                if (self.application == "inference") and (logits[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
+                if (self.application == "inference") and (batch_prediction_probabilities[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
                     continue
 
                 self.batch_predictions_formatted[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
@@ -311,7 +314,8 @@ class LoadPredictionsModel:
                 frame_predictions["logits"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["labels"])
                 frame_predictions["pred_boxes"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["bbox"])
 
-        frame_predictions["logits"] = torch.tensor(frame_predictions["logits"], dtype=torch.float32)
+        frame_predictions["logits"] = torch.torch.tensor(frame_predictions["logits"], dtype=torch.float32)
+        frame_predictions["logits"] = torch.log(frame_predictions["logits"] / (1 - frame_predictions["logits"]))
         frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32)
         return frame_predictions
 

@@ -40,9 +40,9 @@ from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_SAVED_IMAGES
 from utils import PREDICTION_LABELS_JSON_FILENAME
 from utils import PREDICTION_LABELS_PKL_FILENAME
-from utils import PREDICTION_LOGITS_JSON_FILENAME
-from utils import PREDICTION_LOGITS_PKL_FILENAME
-from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
+from utils import PREDICTION_PROBABILITIES_JSON_FILENAME
+from utils import PREDICTION_PROBABILITIES_PKL_FILENAME
+from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
@@ -69,34 +69,34 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
         labels_output_dict[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, scaled_frame_boxes):
             if from_logits:
-                prediction = torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
+                prediction_probabilities = torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
             else:
-                prediction = logits
+                prediction_probabilities = logits
 
-            if prediction[-1] >= BOX_CONFIDENCE_THRESHOLD:
-                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction[:-1], "bbox": box})
+            if prediction_probabilities[-1] >= BOX_CONFIDENCE_THRESHOLD:
+                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities[:-1], "bbox": box})
 
                 predicted_labels = []
-                for i in range(len(prediction) - 1):
-                    if prediction[i] > LABEL_CONFIDENCE_THRESHOLD:
+                for i in range(len(prediction_probabilities) - 1):
+                    if prediction_probabilities[i] > LABEL_CONFIDENCE_THRESHOLD:
                         predicted_labels.append(i)
 
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
             else:
                 # TODO(Charles): Should we include boxes with low confidence in submission?
-                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction[:-1]), "bbox": box})
+                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction_probabilities[:-1]), "bbox": box})
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": [], "bbox": box})
 
-            logits_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction, "bbox": box})
+            logits_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities, "bbox": box})
 
-    logging.info("Saving pkl prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME))
-    write_pkl_file(os.path.join(output_dir, PREDICTION_LOGITS_PKL_FILENAME), logits_output_dict)
+    logging.info("Saving pkl prediction logits to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME))
+    write_pkl_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME), logits_output_dict)
 
-    logging.info("Saving json prediction logits to %s" % os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME), logits_output_dict)
+    logging.info("Saving json prediction logits to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
+    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME), logits_output_dict)
 
-    logging.info("Saving json prediction logits with confidence to %s" % os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME), logits_with_confidence_output_dict)
+    logging.info("Saving json prediction logits with confidence to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME))
+    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME), logits_with_confidence_output_dict)
 
     logging.info("Saving pkl prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME))
     write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), labels_output_dict)
@@ -154,7 +154,7 @@ def calculate_metrics(dataset, output_dir):
         return
 
     logging.info("Loading predicted logits and labels.")
-    predicted_logits = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
+    predicted_logits = load_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
     predicted_labels = load_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
 
     frame_indexes, class_predictions, box_predictions = format_saved_predictions(predicted_logits, dataset)

@@ -22,9 +22,9 @@ TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.jso
 HARD_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
 SOFT_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "soft-co-occurrence.csv")
 
-PREDICTION_LOGITS_JSON_FILENAME = "prediction_logits.json"
-PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME = "prediction_logits_with_confidence.json"
-PREDICTION_LOGITS_PKL_FILENAME = "prediction_logits.pkl"
+PREDICTION_PROBABILITIES_JSON_FILENAME = "prediction_probabilities.json"
+PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME = "prediction_probabilities_with_confidence.json"
+PREDICTION_PROBABILITIES_PKL_FILENAME = "prediction_probabilities.pkl"
 PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
 PREDICTION_LABELS_PKL_FILENAME = "prediction_labels.pkl"
 EVALUATION_METRICS_FILENAME = "evaluation_metrics.json"

@@ -10,8 +10,8 @@ from utils import ratio_to_pixel_coordinates
 from utils import BASE_RGB_IMAGES_DIR
 from utils import BASE_TEST_RGB_IMAGES_DIR
 from utils import LABEL_MAPPING
-from utils import PREDICTION_LOGITS_JSON_FILENAME
-from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
+from utils import PREDICTION_PROBABILITIES_JSON_FILENAME
+from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
 
 BORDER_LINEWIDTH = 1
 DETECTED_BORDER_COLOR = (0, 1, 0)
@@ -68,7 +68,7 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
     :param write_ground_truth: Whether the images should be saved with ground truth boxes and labels.
     :param test: Whether the dataset is a test dataset.
     """
-    predictions = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME))
+    predictions = load_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME))
     label_mapping = LABEL_MAPPING
 
     for video_id, video_predictions in predictions.items():
