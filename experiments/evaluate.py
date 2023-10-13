@@ -153,7 +153,7 @@ def calculate_metrics(dataset, output_dir):
         logging.info("Saved metrics: %s" % results)
         return
 
-    logging.info("Loading predicted logits and labels.")
+    logging.info("Loading predicted probabilities and labels.")
     predicted_probabilities = load_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
     predicted_labels = load_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
 
