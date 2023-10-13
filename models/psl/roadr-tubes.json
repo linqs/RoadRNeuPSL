@@ -37,8 +37,8 @@
       "0 * LinkedFrame(FrameID1, FrameID2) + Neural(FrameID1, BoundingBoxID1, '45') - Neural(FrameID2, BoundingBoxID2, '45') = 1.0 - SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '3') .",
 
       "1.0: LinkedFrame(FrameID1, FrameID2) & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '0') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '1') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '2') & SameCorner(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2, '3') -> SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) ^2",
-      "1.0: LinkedFrame(FrameID1, FrameID2) & Label(FrameID1, BoundingBoxID, Class) & SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) & !BoundingBox(Class) & !BoxConfidence(Class) -> Label(FrameID2, BoundingBoxID, Class) ^2",
-      "1.0: LinkedFrame(FrameID1, FrameID2) & !Label(FrameID1, BoundingBoxID, Class) & SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) & !BoundingBox(Class) & !BoxConfidence(Class) -> !Label(FrameID2, BoundingBoxID, Class) ^2",
+      "1.0: LinkedFrame(FrameID1, FrameID2) & Label(FrameID1, BoundingBoxID1, Class) & SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) & !BoundingBox(Class) & !BoxConfidence(Class) -> Label(FrameID2, BoundingBoxID2, Class) ^2",
+      "1.0: LinkedFrame(FrameID1, FrameID2) & !Label(FrameID1, BoundingBoxID1, Class) & SameBox(FrameID1, FrameID2, BoundingBoxID1, BoundingBoxID2) & !BoundingBox(Class) & !BoxConfidence(Class) -> !Label(FrameID2, BoundingBoxID2, Class) ^2",
 
       "SameBox(FrameID1, FrameID2, BoundingBoxID1, +BoundingBoxID2) <= 1 .",
 
