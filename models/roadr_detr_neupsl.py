@@ -333,9 +333,9 @@ class LoadPredictionsModel:
                 self.dataset.image_height() / self.dataset.image_resize,
                 self.dataset.image_width() / self.dataset.image_resize).tolist()
 
-        frame_predictions["logits"] = torch.torch.tensor(frame_predictions["logits"], dtype=torch.float32)
+        frame_predictions["logits"] = torch.torch.tensor(frame_predictions["logits"], dtype=torch.float32, device=get_torch_device())
         frame_predictions["logits"] = torch.log(frame_predictions["logits"] / (1 - frame_predictions["logits"]))
-        frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32)
+        frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32, device=get_torch_device())
 
         return frame_predictions
 
