@@ -146,9 +146,20 @@ def precision_recall_f1(dataset, predictions):
                     elif truth_label[class_index] == 0 and detected[class_index] == 0:
                         tn += 1
 
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-    f1_score = 2 * (precision * recall) / (precision + recall)
+    if tp + fp == 0:
+        precision = 0
+    else:
+        precision = tp / (tp + fp)
+
+    if tp + fn == 0:
+        recall = 0
+    else:
+        recall = tp / (tp + fn)
+
+    if precision + recall == 0:
+        f1_score = 0
+    else:
+        f1_score = 2 * (precision * recall) / (precision + recall)
 
     return precision, recall, f1_score
 
