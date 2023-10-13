@@ -154,10 +154,10 @@ def calculate_metrics(dataset, output_dir):
         return
 
     logging.info("Loading predicted logits and labels.")
-    predicted_logits = load_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
+    predicted_probabilities = load_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
     predicted_labels = load_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
 
-    frame_indexes, class_predictions, box_predictions = format_saved_predictions(predicted_logits, dataset)
+    frame_indexes, class_predictions, box_predictions = format_saved_predictions(predicted_probabilities, dataset)
 
     logging.info("Calculating metrics.")
 
