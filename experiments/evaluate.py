@@ -19,6 +19,7 @@ from models.evaluation import count_violated_constraints
 from models.evaluation import filter_detections
 from models.evaluation import load_ground_truth_for_detections
 from models.evaluation import mean_average_precision
+from models.evaluation import precision_recall_f1
 from models.trainer import Trainer
 from utils import get_torch_device
 from utils import load_constraint_file
@@ -152,26 +153,37 @@ def calculate_metrics(dataset, output_dir):
         logging.info("Saved metrics: %s" % results)
         return
 
-    logging.info("Loading predictions.")
-    predictions = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
-    frame_indexes, class_predictions, box_predictions = format_saved_predictions(predictions, dataset)
+    logging.info("Loading predicted logits and labels.")
+    predicted_logits = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
+    predicted_labels = load_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
+
+    frame_indexes, class_predictions, box_predictions = format_saved_predictions(predicted_logits, dataset)
 
     logging.info("Calculating metrics.")
 
-    logging.info("Calculating mean average precision.")
+    logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
     filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
     filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
     mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
+    logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
+    precision, recall, f1 = precision_recall_f1(dataset, predicted_labels)
+    logging.info("Precision: %s" % precision)
+    logging.info("Recall: %s" % recall)
+    logging.info("F1: %s" % f1)
+
     logging.info("Counting constraint violations.")
-    num_constraint_violations, num_frames_with_violation, constraint_violation_dict = count_violated_constraints(class_predictions, load_constraint_file(HARD_CONSTRAINTS_PATH), positive_threshold=LABEL_CONFIDENCE_THRESHOLD)
+    num_constraint_violations, num_frames_with_violation, constraint_violation_dict = count_violated_constraints(predicted_labels, load_constraint_file(HARD_CONSTRAINTS_PATH))
     logging.info("Number of constraint violations: {}".format(num_constraint_violations))
     logging.info("Number of frames with constraint violations: {}".format(num_frames_with_violation))
     logging.info("Constraint violation dict: {}".format(constraint_violation_dict))
 
     metrics = {
         "mean_avg_prec": mean_avg_prec,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
         "num_constraint_violations": num_constraint_violations,
         "num_frames_with_violation": num_frames_with_violation,
         "constraint_violation_dict": constraint_violation_dict

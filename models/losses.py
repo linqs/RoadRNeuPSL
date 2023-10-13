@@ -153,6 +153,28 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
+def single_box_iou(box1, box2):
+    """
+    Compute the intersection over union of two boxes, each box is [x0, y0, x1, y1].
+    :param box1: Tensor of shape [4]
+    :param box2: Tensor of shape [4]
+    :return: A scalar representing the iou of the two boxes.
+    """
+    area1 = torchvision.ops.boxes.box_area(box1)
+    area2 = torchvision.ops.boxes.box_area(box2)
+
+    lt = torch.max(box1[:, :2], box2[:, :2])  # [2]
+    rb = torch.min(box1[:, 2:], box2[:, 2:])  # [2]
+
+    wh = (rb - lt).clamp(min=0)  # [2]
+    inter = wh[:, 0] * wh[:, 1]  # [1]
+
+    union = area1 + area2 - inter
+
+    iou = inter / union
+    return iou
+
+
 def _hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int=1):
     """
     Computes an assignment between the predictions and the truth boxes.

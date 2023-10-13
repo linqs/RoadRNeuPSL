@@ -208,6 +208,23 @@ def ratio_to_pixel_coordinates(bounding_boxes, height, width):
     return bounding_boxes
 
 
+def pixel_to_ratio_coordinates(bounding_boxes, height, width):
+    """
+    Converts bounding boxes from pixel to ratio coordinates.
+    :param bounding_boxes: List of bounding boxes in pixel coordinates.
+    :param height: Height of the image.
+    :param width: Width of the image.
+    :return: List of bounding boxes in ratio coordinates.
+    """
+    if len(bounding_boxes) != 0:
+        bounding_boxes[:, 0] /= width
+        bounding_boxes[:, 1] /= height
+        bounding_boxes[:, 2] /= width
+        bounding_boxes[:, 3] /= height
+
+    return bounding_boxes
+
+
 def box_cxcywh_to_xyxy(x):
     """
     Convert bounding box format from [x_c, y_c, w, h] to [x0, y0, x1, y1]

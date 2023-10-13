@@ -48,6 +48,7 @@ class RoadRDataset(Dataset):
 
         self.frame_ids = []
         self.frame_indexes = {}
+        self.load_labels = False
         self.load_frame_ids()
         logging.info("Total frames counted in all videos: {0}".format(len(self.frame_ids)))
 
@@ -71,10 +72,12 @@ class RoadRDataset(Dataset):
                 self.frame_ids.append([videoname, frame_file_name])
                 num_video_frames += 1
 
-    def load_frame(self, frame_index):
+    def load_frame(self, frame_index, load_image=True):
         videoname, framename = self.frame_ids[frame_index]
 
-        image = self.processor(Image.open(os.path.join(self.base_rgb_images_dir, videoname, framename)))
+        image = {'pixel_values': [[]], 'pixel_mask': [[]]}
+        if load_image:
+            image = self.processor(Image.open(os.path.join(self.base_rgb_images_dir, videoname, framename)))
 
         if self.test:
             return image['pixel_values'][0], image['pixel_mask'][0], torch.tensor([]), torch.tensor([])
@@ -107,6 +110,10 @@ class RoadRDataset(Dataset):
 
     def get_frame_index(self, frame_id):
         return self.frame_indexes[frame_id]
+
+    def get_labels_and_boxes(self, frame_index):
+        _, _, labels, boxes = self.load_frame(frame_index, load_image=False)
+        return labels, boxes
 
     def __len__(self):
         return len(self.frame_ids)
