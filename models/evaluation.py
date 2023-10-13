@@ -61,7 +61,7 @@ def load_ground_truth_for_detections(dataset, indexes, num_classes=NUM_CLASSES):
     ground_truth = []
 
     for frame_index in indexes:
-        _, _, _, frame_truth_labels, frame_truth_boxes = dataset[frame_index]
+        frame_truth_labels, frame_truth_boxes = dataset.get_labels_and_boxes(frame_index)
 
         mask_frame_boxes = frame_truth_boxes.sum(dim=1).gt(0)
 
@@ -131,6 +131,7 @@ def precision_recall_f1(dataset, predictions):
 
                     if single_box_iou(truth_box, detected_box) > IOU_THRESHOLD:
                         detected = detection['labels']
+                        break
 
                 detected = [1 if label in detected else 0 for label in range(NUM_CLASSES)]
                 for class_index in range(NUM_CLASSES):
