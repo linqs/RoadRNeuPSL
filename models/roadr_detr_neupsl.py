@@ -160,7 +160,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
 
         frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
-        loss, results = detr_loss(self.formatted_batch_box_predictions, self.batch_predictions["logits"], boxes, labels)
+        loss, results = detr_loss(self.formatted_batch_box_predictions, self.batch_predictions["logits"], boxes, labels, model=self.model)
 
         loss = (1 - float(options["alpha"])) * loss
         loss.backward(retain_graph=True)

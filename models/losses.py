@@ -1,16 +1,20 @@
+import logging
+import os
+
 import torch
 import torchvision
 
 from scipy.optimize import linear_sum_assignment
 
-from utils import box_cxcywh_to_xyxy
+from utils import write_json_file
+from utils import BASE_RESULTS_DIR
 
 BCE_WEIGHT = 1
 GIOU_WEIGHT = 5
 L1_WEIGHT = 2
 
 
-def detr_loss(pred_boxes, pred_logits, truth_boxes, truth_labels, bce_weight: int = BCE_WEIGHT, giou_weight: int = GIOU_WEIGHT, l1_weight: int = L1_WEIGHT):
+def detr_loss(pred_boxes, pred_logits, truth_boxes, truth_labels, bce_weight: int = BCE_WEIGHT, giou_weight: int = GIOU_WEIGHT, l1_weight: int = L1_WEIGHT, model=None):
     """
     Computes the detr loss for the given outputs and targets.
     First compute the matching between the predictions and the ground truth using hungarian sort.
@@ -24,16 +28,17 @@ def detr_loss(pred_boxes, pred_logits, truth_boxes, truth_labels, bce_weight: in
     :param bce_weight: Weight for the binary cross entropy loss
     :param giou_weight: Weight for the generalized box iou loss
     :param l1_weight: Weight for the l1 loss
+    :param model: (Optional) The model used for predictions. Providing this will print model parameters when NaNs are detected.
     :return: Detr loss and a dict containing the computed losses
     """
     # First compute the matching between the predictions and the ground truth.
-    matching = _hungarian_match(pred_boxes, truth_boxes)
+    matching = _hungarian_match(pred_boxes, truth_boxes, model=model)
 
     # Compute the classification loss using the matching.
     bce_loss = binary_cross_entropy_with_logits(pred_logits, truth_labels, matching)
 
     # Compute the bounding box loss using the matching.
-    giou_loss = pairwise_generalized_box_iou(pred_boxes, truth_boxes, matching)
+    giou_loss = pairwise_generalized_box_iou(pred_boxes, truth_boxes, matching, model=model)
 
     # Compute the bounding box l2 loss using the matching.
     l1_loss = pairwise_l1_loss(pred_boxes, truth_boxes, matching)
@@ -86,7 +91,7 @@ def pairwise_l1_loss(boxes1, boxes2, indices) -> torch.Tensor:
     return torch.nn.functional.l1_loss(aligned_boxes1, aligned_boxes2)
 
 
-def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:
+def pairwise_generalized_box_iou(boxes1, boxes2, indices, model=None) -> torch.Tensor:
     """
     Computes the pairwise generalized box iou loss for the given outputs and targets aligned using the given indices.
     :param boxes1: The first set of boxes. tensor of shape [batch_size, num_queries, 4]
@@ -94,25 +99,43 @@ def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:
     :param indices: The indices used to align the boxes. A list of size batch_size, containing tuples of (index_i, index_j) where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected targets (in order)
+    :param model: (Optional) The model used for predictions. Providing this will print model parameters when NaNs are detected.
     :return: The computed pairwise generalized box iou loss.
     """
     # Align the boxes using the given indices.
     aligned_boxes1 = torch.stack([boxes1[i, indices[i, 0, :], :] for i in range(boxes1.shape[0])]).flatten(0, 1)
     aligned_boxes2 = torch.stack([boxes2[i, indices[i, 1, :], :] for i in range(boxes2.shape[0])]).flatten(0, 1)
 
-    return (1 - torch.diag(generalized_box_iou(aligned_boxes1, aligned_boxes2)).sum() / aligned_boxes1.shape[0])
+    return (1 - torch.diag(generalized_box_iou(aligned_boxes1, aligned_boxes2, model=model)).sum() / aligned_boxes1.shape[0])
 
 
-def generalized_box_iou(boxes1, boxes2):
+def generalized_box_iou(boxes1, boxes2, model=None):
     """
     Generalized IoU from https://giou.stanford.edu/
     The boxes should be in [x0, y0, x1, y1] format
     :param boxes1: Tensor of shape [N, 4]
     :param boxes2: Tensor of shape [M, 4]
+    :param model: (Optional) The model used for predictions. Providing this will print model parameters when NaNs are detected.
     :return: A [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
-    assert not torch.isnan(boxes1).any()
-    assert not torch.isnan(boxes2).any()
+    if torch.isnan(boxes1).any():
+        logging.info("Boxes1 contains NaNs.")
+        log = {"boxes": boxes1.tolist(), "model": {}}
+        if model is not None:
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    log["model"][name] = param.data.tolist()
+        write_json_file(os.path.join(BASE_RESULTS_DIR, "nan_boxes1.json"), log, indent=None)
+        assert not torch.isnan(boxes1).any()
+    if torch.isnan(boxes2).any():
+        logging.info("Boxes2 contains NaNs.")
+        log = {"boxes": boxes2.tolist(), "model": {}}
+        if model is not None:
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    log["model"][name] = param.data.tolist()
+        write_json_file(os.path.join(BASE_RESULTS_DIR, "nan_boxes2.json"), log, indent=None)
+        assert not torch.isnan(boxes1).any()
 
     assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
     assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
@@ -173,12 +196,13 @@ def single_box_iou(box1, box2):
     return iou
 
 
-def _hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int=1):
+def _hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int=1, model=None):
     """
     Computes an assignment between the predictions and the truth boxes.
     :param pred_boxes: Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates in [x0, y0, x1, y1] format.
     :parm truth_boxes: This is a list of targets bounding boxes (len(targets) = batch_size), where each entry is
             a tensor of dim [num_target_boxes, 4] containing the target box coordinates in [x0, y0, x1, y1] format.
+    :param model: (Optional) The model used for predictions. Providing this will print model parameters when NaNs are detected.
     :return: A list of size batch_size, containing tuples of (index_i, index_j) where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected targets (in order)
@@ -197,7 +221,7 @@ def _hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int
     cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 
     # Compute the giou cost between boxes
-    cost_giou = -generalized_box_iou(out_bbox, tgt_bbox)
+    cost_giou = -generalized_box_iou(out_bbox, tgt_bbox, model=model)
 
     # Final cost matrix
     C = l1_weight * cost_bbox + giou_weight * cost_giou

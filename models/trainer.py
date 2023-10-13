@@ -68,7 +68,7 @@ class Trainer:
                     for i in range(len(batch_predictions["pred_boxes"])):
                         formatted_boxes[i] += box_cxcywh_to_xyxy(batch_predictions["pred_boxes"][i])
 
-                    loss, results = detr_loss(formatted_boxes, batch_predictions["logits"], boxes, labels)
+                    loss, results = detr_loss(formatted_boxes, batch_predictions["logits"], boxes, labels, model=self.model)
 
                     epoch_loss += loss.item()
                     epoch_bce_loss += results["bce_loss"] * results["bce_weight"]
@@ -174,7 +174,7 @@ class Trainer:
                     batch_predictions["pred_boxes"][i] = box_cxcywh_to_xyxy(batch_predictions["pred_boxes"][i])
 
                 if calculate_loss:
-                    _, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
+                    _, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels, model=self.model)
 
                     total_loss += results["loss"]
                     total_bce_loss += results["bce_loss"] * results["bce_weight"]
