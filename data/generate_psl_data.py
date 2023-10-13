@@ -44,7 +44,7 @@ def generate_experiment(experiment_dir, tube_size):
             linked_frames.append([tube_index + 1, tube_index])
 
         for bounding_box_index_i in range(NUM_NEUPSL_QUERIES):
-            for class_index in range(NUM_CLASSES + len(BOUNDING_BOX_CLASSES)):
+            for class_index in range(NUM_CLASSES + len(BOX_CONFIDENCE_CLASS) + len(BOUNDING_BOX_CLASSES)):
                 entity_targets.append([tube_index, bounding_box_index_i, class_index])
 
             if tube_index < tube_size - 1:
