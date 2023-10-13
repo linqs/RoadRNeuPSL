@@ -134,7 +134,7 @@ def run_neural_inference(dataset, arguments):
 
     logging.info("Building and loading pre-trained model from {}.".format(arguments.saved_model_path))
     model = build_model()
-    model.load_state_dict(torch.load(arguments.saved_model_path))
+    model.load_state_dict(torch.load(arguments.saved_model_path, map_location=get_torch_device()))
 
     logging.info("Running neural inference with trained model {}.".format(arguments.saved_model_path))
     trainer = Trainer(model, None, None, get_torch_device(), os.path.join(arguments.output_dir))
@@ -186,12 +186,14 @@ def save_images(dataset, arguments):
         pass
     elif arguments.save_images.upper() == "BOXES":
         save_images_with_bounding_boxes(dataset, arguments.output_dir, False,
-                                        arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD,
+                                        arguments.max_saved_images,
+                                        LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
                                         write_ground_truth=(not arguments.test_evaluation),
                                         test=arguments.test_evaluation)
     elif arguments.save_images.upper() == "BOXES_AND_LABELS":
         save_images_with_bounding_boxes(dataset, arguments.output_dir, True,
-                                        arguments.max_saved_images, LABEL_CONFIDENCE_THRESHOLD,
+                                        arguments.max_saved_images,
+                                        LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
                                         write_ground_truth=(not arguments.test_evaluation),
                                         test=arguments.test_evaluation)
     else:

@@ -25,6 +25,7 @@ from utils import save_model_state
 from utils import seed_everything
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
+from utils import BOX_CONFIDENCE_THRESHOLD
 from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NEUPSL_TEST_INFERENCE_DIR
 from utils import NEUPSL_TRAINED_MODEL_DIR
@@ -206,7 +207,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                 calculate_metrics(self.dataset, self.evaluation_out_dir)
 
             save_images_with_bounding_boxes(self.dataset, self.evaluation_out_dir, True,
-                                            NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD,
+                                            NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
                                             write_ground_truth=(options["inference_split"] == "VALID"),
                                             test=(options["inference_split"] == "TEST"))
 
@@ -256,6 +257,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         for batch_index in range(len(batch_predictions)):
             for box_index in range(NUM_NEUPSL_QUERIES):
+                if (self.application == "inference") and (logits[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
+                    continue
+
                 self.batch_predictions_formatted[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
 
         return self.batch_predictions_formatted.flatten(start_dim=0, end_dim=1).cpu().detach().numpy().tolist()

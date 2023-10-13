@@ -11,6 +11,7 @@ from utils import BASE_RGB_IMAGES_DIR
 from utils import BASE_TEST_RGB_IMAGES_DIR
 from utils import LABEL_MAPPING
 from utils import PREDICTION_LOGITS_JSON_FILENAME
+from utils import PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME
 
 BORDER_LINEWIDTH = 1
 DETECTED_BORDER_COLOR = (0, 1, 0)
@@ -55,7 +56,7 @@ def save_frame_with_bounding_boxes(load_path, save_path, ground_truth_boxes, det
     plt.close()
 
 
-def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_labels, max_saved_images, labels_confidence_threshold, write_ground_truth=True, test=False):
+def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_labels, max_saved_images, labels_confidence_threshold, box_confidence_threshold, write_ground_truth=True, test=False):
     """
     Saves images with bounding boxes for the given dataset.
     :param dataset: Dataset for which the images should be saved.
@@ -63,10 +64,11 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
     :param write_images_with_labels: Whether the images should be saved with labels.
     :param max_saved_images: Maximum number of images to save.
     :param labels_confidence_threshold: Label confidence used to output labels on images with labels.
+    :param box_confidence_threshold: Label confidence used to output labels on images with labels.
     :param write_ground_truth: Whether the images should be saved with ground truth boxes and labels.
     :param test: Whether the dataset is a test dataset.
     """
-    predictions = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_JSON_FILENAME))
+    predictions = load_json_file(os.path.join(output_dir, PREDICTION_LOGITS_WITH_CONFIDENCE_JSON_FILENAME))
     label_mapping = LABEL_MAPPING
 
     for video_id, video_predictions in predictions.items():
@@ -87,8 +89,8 @@ def save_images_with_bounding_boxes(dataset, output_dir, write_images_with_label
             if write_ground_truth:
                 ground_truth_boxes = ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
 
-            detected_boxes = torch.Tensor([prediction["bbox"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
-            detected_labels = torch.Tensor([prediction["labels"] for prediction in frame_predictions if sum(prediction["labels"]) > 0])
+            detected_boxes = torch.Tensor([prediction["bbox"] for prediction in frame_predictions if prediction["labels"][-1] > box_confidence_threshold])
+            detected_labels = torch.Tensor([prediction["labels"][:-1] for prediction in frame_predictions if prediction["labels"][-1] > box_confidence_threshold])
             detected_labels = detected_labels.gt(labels_confidence_threshold).float()
 
             save_frame_path = os.path.join(output_dir, "rgb-images", video_id, frame_id[:-4] + "_boxes.jpg")
