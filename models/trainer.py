@@ -78,8 +78,6 @@ class Trainer:
                     loss.backward()
                     self.post_gradient_computation()
 
-
-
                     self.optimizer.step()
 
                     postfix_data = {
