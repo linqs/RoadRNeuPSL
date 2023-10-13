@@ -100,9 +100,7 @@ def pairwise_generalized_box_iou(boxes1, boxes2, indices) -> torch.Tensor:
     aligned_boxes1 = torch.stack([boxes1[i, indices[i, 0, :], :] for i in range(boxes1.shape[0])]).flatten(0, 1)
     aligned_boxes2 = torch.stack([boxes2[i, indices[i, 1, :], :] for i in range(boxes2.shape[0])]).flatten(0, 1)
 
-    return (1 - torch.diag(generalized_box_iou(
-        box_cxcywh_to_xyxy(aligned_boxes1),
-        box_cxcywh_to_xyxy(aligned_boxes2))).sum() / aligned_boxes1.shape[0])
+    return (1 - torch.diag(generalized_box_iou(aligned_boxes1, aligned_boxes2)).sum() / aligned_boxes1.shape[0])
 
 
 def generalized_box_iou(boxes1, boxes2):
@@ -178,9 +176,9 @@ def single_box_iou(box1, box2):
 def _hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int=1):
     """
     Computes an assignment between the predictions and the truth boxes.
-    :param pred_boxes: Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
+    :param pred_boxes: Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates in [x0, y0, x1, y1] format.
     :parm truth_boxes: This is a list of targets bounding boxes (len(targets) = batch_size), where each entry is
-            a tensor of dim [num_target_boxes, 4] containing the target box coordinates
+            a tensor of dim [num_target_boxes, 4] containing the target box coordinates in [x0, y0, x1, y1] format.
     :return: A list of size batch_size, containing tuples of (index_i, index_j) where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected targets (in order)
@@ -199,7 +197,7 @@ def _hungarian_match(pred_boxes, truth_boxes, l1_weight: int=0, giou_weight: int
     cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 
     # Compute the giou cost between boxes
-    cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+    cost_giou = -generalized_box_iou(out_bbox, tgt_bbox)
 
     # Final cost matrix
     C = l1_weight * cost_bbox + giou_weight * cost_giou

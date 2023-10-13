@@ -96,7 +96,7 @@ def mean_average_precision(ground_truths, detections, iou_threshold=0.5):
     :param detections: List containing the detections.
     :param iou_threshold: Threshold for the IoU.
     """
-    map_metric = MeanAveragePrecision(iou_thresholds=[iou_threshold], iou_type="bbox")
+    map_metric = MeanAveragePrecision(iou_thresholds=[iou_threshold], iou_type="bbox", box_format="xyxy")
 
     map_metric.update(detections, ground_truths)
     values = map_metric.compute()
@@ -127,7 +127,9 @@ def precision_recall_f1(dataset, predictions):
                 if truth_box.sum() == 0:
                     continue
                 for detection in predictions[video_id][frame_id]:
-                    detected_box = pixel_to_ratio_coordinates(torch.Tensor([detection['bbox']]), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+                    detected_box = pixel_to_ratio_coordinates(torch.Tensor([detection['bbox']]),
+                                                              dataset.image_height() / dataset.image_resize,
+                                                              dataset.image_width() / dataset.image_resize)
 
                     if single_box_iou(truth_box, detected_box) > IOU_THRESHOLD:
                         detected = detection['labels']

@@ -7,6 +7,7 @@ import tqdm
 from torch.utils.data import DataLoader
 
 from models.losses import detr_loss
+from utils import box_cxcywh_to_xyxy
 from utils import save_model_state
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_TRAINING_CONVERGENCE_FILENAME
@@ -63,8 +64,11 @@ class Trainer:
 
                     frame_ids, pixel_values, pixel_mask, labels, boxes = batch
                     batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+                    formatted_boxes = torch.zeros(size=batch_predictions["pred_boxes"].shape, device=self.device)
+                    for i in range(len(batch_predictions["pred_boxes"])):
+                        formatted_boxes[i] += box_cxcywh_to_xyxy(batch_predictions["pred_boxes"][i])
 
-                    loss, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)
+                    loss, results = detr_loss(formatted_boxes, batch_predictions["logits"], boxes, labels)
 
                     epoch_loss += loss.item()
                     epoch_bce_loss += results["bce_loss"] * results["bce_weight"]
@@ -73,6 +77,8 @@ class Trainer:
 
                     loss.backward()
                     self.post_gradient_computation()
+
+
 
                     self.optimizer.step()
 
@@ -166,6 +172,8 @@ class Trainer:
 
                 frame_ids, pixel_values, pixel_mask, labels, boxes = batch
                 batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+                for i in range(len(batch_predictions["pred_boxes"])):
+                    batch_predictions["pred_boxes"][i] = box_cxcywh_to_xyxy(batch_predictions["pred_boxes"][i])
 
                 if calculate_loss:
                     _, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels)

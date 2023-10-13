@@ -19,8 +19,10 @@ from experiments.evaluate import save_logits_and_labels
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.losses import detr_loss
+from utils import box_cxcywh_to_xyxy
 from utils import get_torch_device
 from utils import load_json_file
+from utils import pixel_to_ratio_coordinates
 from utils import save_model_state
 from utils import seed_everything
 from utils import BASE_CLI_DIR
@@ -63,6 +65,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.scheduler = None
 
         self.batch_predictions = None
+        self.formatted_batch_box_predictions = None
         self.batch_predictions_formatted = None
 
         self.iterator = None
@@ -82,6 +85,20 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.model_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR)
 
+        if self.application == "learning":
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
+                                        float(options["image-resize"]),
+                                        max_frames=int(options["max-frames"]))
+        else:
+            annotation_path = TRAIN_VALIDATION_DATA_PATH if options["inference_split"] == "VALID" else None
+
+            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], annotation_path, float(options["image-resize"]),
+                                        max_frames=int(options["max-frames"]), test=(options["inference_split"] == "TEST"))
+
+        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]),
+                                     shuffle=False, num_workers=int(os.cpu_count()) - 2,
+                                     prefetch_factor=4, persistent_workers=True)
+
         if options["load-predictions"] == "true":
             assert self.application != "learning"
             if (options["inference_split"] == "VALID"):
@@ -90,7 +107,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                 predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
             else:
                 raise ValueError("Invalid inference split: {0}".format(options["inference_split"]))
-            self.model = LoadPredictionsModel(predictions_path)
+            self.model = LoadPredictionsModel(predictions_path, self.dataset)
         else:
             self.model = build_model()
 
@@ -100,9 +117,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         if self.application == "learning":
             if os.path.isfile(neural_trained_model_path):
                 self.model.load_state_dict(torch.load(neural_trained_model_path))
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
-                                        float(options["image-resize"]),
-                                        max_frames=int(options["max-frames"]))
+
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
             self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(options["step-size"]), gamma=float(options["gamma"]))
         else:
@@ -133,15 +148,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             if options["load-predictions"] == "false":
                 self.model.load_state_dict(torch.load(trained_model_path, map_location=get_torch_device()))
 
-            annotation_path = TRAIN_VALIDATION_DATA_PATH if options["inference_split"] == "VALID" else None
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]][options["inference_split"]], annotation_path, float(options["image-resize"]),
-                                        max_frames=int(options["max-frames"]), test=(options["inference_split"] == "TEST"))
             self.optimizer = None
             self.scheduler = None
-
-        self.dataloader = DataLoader(self.dataset, batch_size=int(options["batch-size"]),
-                                     shuffle=False, num_workers=int(os.cpu_count()) - 2,
-                                     prefetch_factor=4, persistent_workers=True)
 
         return {}
 
@@ -152,7 +160,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
 
         frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
-        loss, results = detr_loss(self.batch_predictions["pred_boxes"], self.batch_predictions["logits"], boxes, labels)
+        loss, results = detr_loss(self.formatted_batch_box_predictions, self.batch_predictions["logits"], boxes, labels)
 
         loss = (1 - float(options["alpha"])) * loss
         loss.backward(retain_graph=True)
@@ -170,13 +178,19 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             for frame_index in frame_indexes:
                 frame_ids.append(self.dataset.get_frame_id(frame_index))
             self.batch_predictions = self.model.load_predictions(frame_ids)
+            self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["pred_boxes"].shape, device=get_torch_device())
+            for i in range(len(self.batch_predictions["pred_boxes"])):
+                self.formatted_batch_box_predictions[i] += self.batch_predictions["pred_boxes"][i]
         else:
             self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+            self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["pred_boxes"].shape, device=get_torch_device())
+            for i in range(len(self.batch_predictions["pred_boxes"])):
+                self.formatted_batch_box_predictions[i] += box_cxcywh_to_xyxy(self.batch_predictions["pred_boxes"][i])
 
         if (self.application == "inference") and (not self._train):
             self.all_frame_indexes.extend(frame_indexes.cpu().tolist())
 
-        return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.batch_predictions["pred_boxes"].detach().cpu(), options=options), {}
+        return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.formatted_batch_box_predictions.detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
         if self.application == "learning":
@@ -255,8 +269,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         batch_predictions_sorted_indexes = torch.argsort(logits[:, :, -1], descending=True)
 
         batch_prediction_probabilities = torch.sigmoid(logits)
-        batch_predictions = torch.cat((batch_prediction_probabilities,
-                                       torch.zeros(size=boxes.shape, dtype=torch.float32)), dim=-1)
+        batch_predictions = torch.cat((batch_prediction_probabilities, boxes), dim=-1)
 
         for batch_index in range(len(batch_prediction_probabilities)):
             for box_index in range(NUM_NEUPSL_QUERIES):
@@ -300,9 +313,10 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
 
 class LoadPredictionsModel:
-    def __init__(self, predictions_path):
+    def __init__(self, predictions_path, dataset):
         self.predictions_path = predictions_path
         self.predictions = load_json_file(self.predictions_path)
+        self.dataset = dataset
 
     def load_predictions(self, frame_ids):
         frame_predictions = {"logits": [], "pred_boxes": []}
@@ -314,9 +328,15 @@ class LoadPredictionsModel:
                 frame_predictions["logits"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["labels"])
                 frame_predictions["pred_boxes"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["bbox"])
 
+            frame_predictions["pred_boxes"][batch_frame_index] = pixel_to_ratio_coordinates(
+                torch.tensor(frame_predictions["pred_boxes"][batch_frame_index], dtype=torch.float32),
+                self.dataset.image_height() / self.dataset.image_resize,
+                self.dataset.image_width() / self.dataset.image_resize).tolist()
+
         frame_predictions["logits"] = torch.torch.tensor(frame_predictions["logits"], dtype=torch.float32)
         frame_predictions["logits"] = torch.log(frame_predictions["logits"] / (1 - frame_predictions["logits"]))
         frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32)
+
         return frame_predictions
 
     def eval(self):
