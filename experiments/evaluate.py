@@ -48,25 +48,31 @@ from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
 
 
-def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
-    logits_output_dict = {}
-    logits_with_confidence_output_dict = {}
+def save_probabilities_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
+    probabilities_output_dict = {}
+    probabilities_with_confidence_output_dict = {}
     labels_output_dict = {}
+    submission_probabilities = {}
+    submission_labels = {}
 
     for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
         frame_id = dataset.get_frame_id(frame_index)
 
-        if frame_id[0] not in logits_output_dict:
-            logits_output_dict[frame_id[0]] = {}
-            logits_with_confidence_output_dict[frame_id[0]] = {}
+        if frame_id[0] not in probabilities_output_dict:
+            probabilities_output_dict[frame_id[0]] = {}
+            probabilities_with_confidence_output_dict[frame_id[0]] = {}
             labels_output_dict[frame_id[0]] = {}
+            submission_probabilities[frame_id[0]] = {}
+            submission_labels[frame_id[0]] = {}
 
         frame_logits, frame_boxes = zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
         scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize).tolist()
 
-        logits_output_dict[frame_id[0]][frame_id[1]] = []
-        logits_with_confidence_output_dict[frame_id[0]][frame_id[1]] = []
+        probabilities_output_dict[frame_id[0]][frame_id[1]] = []
+        probabilities_with_confidence_output_dict[frame_id[0]][frame_id[1]] = []
         labels_output_dict[frame_id[0]][frame_id[1]] = []
+        submission_probabilities[frame_id[0]][frame_id[1]] = []
+        submission_labels[frame_id[0]][frame_id[1]] = []
         for logits, box in zip(frame_logits, scaled_frame_boxes):
             if from_logits:
                 prediction_probabilities = torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
@@ -74,7 +80,8 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
                 prediction_probabilities = logits
 
             if prediction_probabilities[-1] >= BOX_CONFIDENCE_THRESHOLD:
-                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities[:-1], "bbox": box})
+                probabilities_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities[:-1], "bbox": box})
+                submission_probabilities[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities[:-1], "bbox": box})
 
                 predicted_labels = []
                 for i in range(len(prediction_probabilities) - 1):
@@ -82,24 +89,24 @@ def save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir, fr
                         predicted_labels.append(i)
 
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
+                submission_labels[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
             else:
-                # TODO(Charles): Should we include boxes with low confidence in submission?
-                logits_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction_probabilities[:-1]), "bbox": box})
+                probabilities_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction_probabilities[:-1]), "bbox": box})
                 labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": [], "bbox": box})
 
-            logits_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities, "bbox": box})
+            probabilities_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities, "bbox": box})
 
-    logging.info("Saving pkl prediction logits to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME))
-    write_pkl_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME), logits_output_dict)
+    logging.info("Saving pkl prediction probabilities to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME))
+    write_pkl_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME), submission_probabilities)
 
-    logging.info("Saving json prediction logits to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME), logits_output_dict)
+    logging.info("Saving json prediction probabilities to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
+    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME), probabilities_output_dict)
 
-    logging.info("Saving json prediction logits with confidence to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME), logits_with_confidence_output_dict)
+    logging.info("Saving json prediction probabilities with confidence to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME))
+    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME), probabilities_with_confidence_output_dict)
 
     logging.info("Saving pkl prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME))
-    write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), labels_output_dict)
+    write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), submission_labels)
 
     logging.info("Saving json prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
     write_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME), labels_output_dict)
@@ -142,7 +149,7 @@ def run_neural_inference(dataset, arguments):
 
     frame_indexes, boxes, logits, _ = trainer.eval(dataloader, calculate_loss=False, keep_predictions=True)
 
-    save_logits_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
+    save_probabilities_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
 
 
 def calculate_metrics(dataset, output_dir):

@@ -15,7 +15,7 @@ import logger
 
 from data.roadr_dataset import RoadRDataset
 from experiments.evaluate import calculate_metrics
-from experiments.evaluate import save_logits_and_labels
+from experiments.evaluate import save_probabilities_and_labels
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.losses import detr_loss
@@ -214,8 +214,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.save()
         elif (self.application == "inference") and (not self._train):
             os.makedirs(self.evaluation_out_dir, exist_ok=True)
-            save_logits_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
-                                   output_dir=self.evaluation_out_dir, from_logits=False)
+            save_probabilities_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
+                                          output_dir=self.evaluation_out_dir, from_logits=False)
 
             if options["inference_split"] == "VALID":
                 calculate_metrics(self.dataset, self.evaluation_out_dir)
