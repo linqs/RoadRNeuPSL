@@ -114,37 +114,57 @@ def precision_recall_f1(dataset, predictions):
     tp = 0
     fp = 0
     fn = 0
-    tn = 0
 
     for video_id in predictions:
         for frame_id in predictions[video_id]:
             frame_index = dataset.get_frame_index((video_id, frame_id))
             truth_labels, truth_boxes = dataset.get_labels_and_boxes(frame_index)
 
-            for truth_label, truth_box in zip(truth_labels, truth_boxes):
-                detected = []
-                truth_box = torch.Tensor([truth_box.tolist()])
-                if truth_box.sum() == 0:
-                    continue
-                for detection in predictions[video_id][frame_id]:
-                    detected_box = pixel_to_ratio_coordinates(torch.Tensor([detection['bbox']]),
-                                                              dataset.image_height() / dataset.image_resize,
-                                                              dataset.image_width() / dataset.image_resize)
+            matched_box_indexes = set()
+            for index in range(len(predictions[video_id][frame_id])):
+                if len(predictions[video_id][frame_id][index]['labels']) == 0:
+                    break
+                detected_box = pixel_to_ratio_coordinates(torch.Tensor([predictions[video_id][frame_id][index]['bbox']]),
+                                                          dataset.image_height() / dataset.image_resize,
+                                                          dataset.image_width() / dataset.image_resize)
 
-                    if single_box_iou(truth_box, detected_box) > IOU_THRESHOLD:
-                        detected = detection['labels']
+                max_box_iou = 0
+                max_truth_label = [0] * NUM_CLASSES
+                max_truth_box = None
+                for index_j in range(len(truth_labels)):
+                    if index_j in matched_box_indexes:
+                        continue
+                    truth_box = torch.Tensor([truth_boxes[index_j].tolist()])
+                    if truth_box.sum() == 0:
                         break
 
-                detected = [1 if label in detected else 0 for label in range(NUM_CLASSES)]
+                    box_iou = single_box_iou(truth_box, detected_box)
+                    if box_iou > IOU_THRESHOLD:
+                        if box_iou > max_box_iou:
+                            max_box_iou = box_iou
+                            max_truth_box = index_j
+                            max_truth_label = truth_labels[index_j]
+
+                if max_truth_box is not None:
+                    matched_box_indexes.add(max_truth_box)
+
+                detected = [1 if label in predictions[video_id][frame_id][index]['labels'] else 0 for label in range(NUM_CLASSES)]
                 for class_index in range(NUM_CLASSES):
-                    if truth_label[class_index] == 1 and detected[class_index] == 1:
+                    if max_truth_label[class_index] == 1 and detected[class_index] == 1:
                         tp += 1
-                    elif truth_label[class_index] == 1 and detected[class_index] == 0:
+                    elif max_truth_label[class_index] == 1 and detected[class_index] == 0:
                         fn += 1
-                    elif truth_label[class_index] == 0 and detected[class_index] == 1:
+                    elif max_truth_label[class_index] == 0 and detected[class_index] == 1:
                         fp += 1
-                    elif truth_label[class_index] == 0 and detected[class_index] == 0:
-                        tn += 1
+
+            for index_j in range(len(truth_labels)):
+                if index_j in matched_box_indexes:
+                    continue
+                if truth_labels[index_j].sum() == 0:
+                    break
+                for class_index in range(NUM_CLASSES):
+                    if truth_labels[index_j][class_index] == 1:
+                        fn += 1
 
     if tp + fp == 0:
         precision = 0
