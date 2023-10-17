@@ -116,7 +116,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         if self.application == "learning":
             if os.path.isfile(neural_trained_model_path):
-                self.model.load_state_dict(torch.load(neural_trained_model_path))
+                self.model.load_state_dict(torch.load(neural_trained_model_path, map_location=get_torch_device()))
 
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
             self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(options["step-size"]), gamma=float(options["gamma"]))
