@@ -164,27 +164,28 @@ class Trainer:
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
 
-        with tqdm.tqdm(dataloader) as tq:
-            for step, batch in enumerate(tq):
-                batch = [b.to(self.device) for b in batch]
+        with torch.no_grad():
+            with tqdm.tqdm(dataloader) as tq:
+                for step, batch in enumerate(tq):
+                    batch = [b.to(self.device) for b in batch]
 
-                frame_ids, pixel_values, pixel_mask, labels, boxes = batch
-                batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
-                for i in range(len(batch_predictions["pred_boxes"])):
-                    batch_predictions["pred_boxes"][i] = box_cxcywh_to_xyxy(batch_predictions["pred_boxes"][i])
+                    frame_ids, pixel_values, pixel_mask, labels, boxes = batch
+                    batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
+                    for i in range(len(batch_predictions["pred_boxes"])):
+                        batch_predictions["pred_boxes"][i] = box_cxcywh_to_xyxy(batch_predictions["pred_boxes"][i])
 
-                if calculate_loss:
-                    _, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels, model=self.model)
+                    if calculate_loss:
+                        _, results = detr_loss(batch_predictions["pred_boxes"], batch_predictions["logits"], boxes, labels, model=self.model)
 
-                    total_loss += results["loss"]
-                    total_bce_loss += results["bce_loss"] * results["bce_weight"]
-                    total_giou_loss += results["giou_loss"] * results["giou_weight"]
-                    total_l1_loss += results["l1_loss"] * results["l1_weight"]
+                        total_loss += results["loss"]
+                        total_bce_loss += results["bce_loss"] * results["bce_weight"]
+                        total_giou_loss += results["giou_loss"] * results["giou_weight"]
+                        total_l1_loss += results["l1_loss"] * results["l1_weight"]
 
-                if keep_predictions:
-                    all_box_predictions.extend(batch_predictions["pred_boxes"].cpu().tolist())
-                    all_logits.extend(batch_predictions["logits"].cpu().tolist())
-                    all_frame_indexes.extend(frame_ids.cpu().tolist())
+                    if keep_predictions:
+                        all_box_predictions.extend(batch_predictions["pred_boxes"].cpu().tolist())
+                        all_logits.extend(batch_predictions["logits"].cpu().tolist())
+                        all_frame_indexes.extend(frame_ids.cpu().tolist())
 
         total_results = {
             "bce_loss": total_bce_loss / dataset_size,
