@@ -7,6 +7,7 @@ from models.losses import single_box_iou
 from utils import pixel_to_ratio_coordinates
 from utils import ratio_to_pixel_coordinates
 from utils import IOU_THRESHOLD
+from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NUM_CLASSES
 
 
@@ -122,7 +123,7 @@ def precision_recall_f1(dataset, predictions):
 
             matched_box_indexes = set()
             for index in range(len(predictions[video_id][frame_id])):
-                if len(predictions[video_id][frame_id][index]['labels']) == 0:
+                if sum(predictions[video_id][frame_id][index]['labels']) < 0.0001:
                     break
                 detected_box = pixel_to_ratio_coordinates(torch.Tensor([predictions[video_id][frame_id][index]['bbox']]),
                                                           dataset.image_height() / dataset.image_resize,
@@ -148,7 +149,7 @@ def precision_recall_f1(dataset, predictions):
                 if max_truth_box is not None:
                     matched_box_indexes.add(max_truth_box)
 
-                detected = [1 if label in predictions[video_id][frame_id][index]['labels'] else 0 for label in range(NUM_CLASSES)]
+                detected = [1 if predictions[video_id][frame_id][index]['labels'][label] > LABEL_CONFIDENCE_THRESHOLD else 0 for label in range(NUM_CLASSES)]
                 for class_index in range(NUM_CLASSES):
                     if max_truth_label[class_index] == 1 and detected[class_index] == 1:
                         tp += 1

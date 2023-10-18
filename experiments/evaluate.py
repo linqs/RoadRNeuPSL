@@ -175,7 +175,7 @@ def calculate_metrics(dataset, output_dir):
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
-    precision, recall, f1 = precision_recall_f1(dataset, predicted_labels)
+    precision, recall, f1 = precision_recall_f1(dataset, predicted_probabilities)
     logging.info("Precision: %s" % precision)
     logging.info("Recall: %s" % recall)
     logging.info("F1: %s" % f1)
