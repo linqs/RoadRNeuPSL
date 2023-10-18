@@ -66,7 +66,9 @@ def save_probabilities_and_labels(dataset, frame_indexes, logits, boxes, output_
             submission_labels[frame_id[0]] = {}
 
         frame_logits, frame_boxes = zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
-        scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes), dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize).tolist()
+        scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes),
+                                                        dataset.image_height() / dataset.image_resize,
+                                                        dataset.image_width() / dataset.image_resize).tolist()
 
         probabilities_output_dict[frame_id[0]][frame_id[1]] = []
         probabilities_with_confidence_output_dict[frame_id[0]][frame_id[1]] = []

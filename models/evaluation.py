@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from torchmetrics.detection import MeanAveragePrecision
@@ -6,6 +7,7 @@ from torchvision.ops import nms
 from models.losses import single_box_iou
 from utils import pixel_to_ratio_coordinates
 from utils import ratio_to_pixel_coordinates
+from utils import AGENT_CLASSES
 from utils import IOU_THRESHOLD
 from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NUM_CLASSES
@@ -50,6 +52,43 @@ def filter_detections(frame_indexes, box_predictions, class_predictions, iou_thr
             filtered_detections.append({'boxes': filtered_frame_boxes, 'scores': filtered_frame_scores, 'labels': filtered_frame_labels})
 
     return filtered_detections, filtered_detection_indexes
+
+
+def agent_nms(box_predictions, box_confidence_scores, class_predictions, iou_threshold=0.6, label_threshold=0.5):
+    """
+    Applies non-maximum suppression to the detections using the agent class.
+    :param box_predictions: The predicted bounding boxes.
+    :param box_confidence_scores: The confidence scores for the predicted bounding boxes.
+    :param class_predictions: The predicted class labels in one-hot encoding.
+    :param iou_threshold: Threshold for the IoU.
+    :param label_threshold: Threshold for the label confidence score.
+    :return: Indices of the detections that should be kept.
+    """
+    kept_element_indexes = []
+    for frame_index in range(box_predictions.shape[0]):
+        frame_boxes = box_predictions[frame_index]
+        frame_scores = box_confidence_scores[frame_index]
+
+        kept_element_indexes.append(set())
+
+        for class_index in AGENT_CLASSES:
+            class_scores = class_predictions[frame_index, :, class_index]
+
+            class_frames_mask = class_scores > label_threshold
+
+            masked_frame_boxes = frame_boxes[class_frames_mask]
+            masked_frame_scores = frame_scores[class_frames_mask]
+
+            nms_kept_indices = nms(boxes=torch.tensor(masked_frame_boxes), scores=torch.tensor(masked_frame_scores), iou_threshold=iou_threshold)
+            nms_kept_indices = nms_kept_indices.numpy()
+            nms_kept_indices = np.arange(len(frame_boxes))[class_frames_mask][nms_kept_indices]
+
+            for index in nms_kept_indices:
+                kept_element_indexes[-1].add(index)
+
+        kept_element_indexes[-1] = list(kept_element_indexes[-1])
+
+    return kept_element_indexes
 
 
 def load_ground_truth_for_detections(dataset, indexes, num_classes=NUM_CLASSES):

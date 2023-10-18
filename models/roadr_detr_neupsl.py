@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 
-import numpy
+import numpy as np
 import pslpython.deeppsl.model
 import torch.nn
 
@@ -18,6 +18,7 @@ from experiments.evaluate import calculate_metrics
 from experiments.evaluate import save_probabilities_and_labels
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
+from models.evaluation import agent_nms
 from models.losses import detr_loss
 from utils import box_cxcywh_to_xyxy
 from utils import get_torch_device
@@ -214,7 +215,40 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             self.save()
         elif (self.application == "inference") and (not self._train):
             os.makedirs(self.evaluation_out_dir, exist_ok=True)
-            save_probabilities_and_labels(self.dataset, self.all_frame_indexes, self.all_class_predictions, self.all_box_predictions,
+
+            nms_keep_indices = agent_nms(
+                np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)),
+                np.array(self.all_class_predictions)[:, :, -1].reshape((len(self.dataset), NUM_QUERIES)),
+                np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1))[:, :, :-1],
+            )
+
+            new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
+            new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
+
+            # Construct the new prediction by keeping only the nms_keep_indices and padding with 0s otherwise.
+            for frame_index in range(len(self.all_frame_indexes)):
+                for box_index in range(NUM_QUERIES):
+                    if box_index in nms_keep_indices[frame_index]:
+                        new_all_box_predictions[frame_index][box_index] = torch.tensor(self.all_box_predictions[frame_index][box_index])
+                        new_all_class_predictions[frame_index][box_index] = torch.tensor(self.all_class_predictions[frame_index][box_index])
+
+            sorted_new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
+            sorted_new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
+
+            # Sort boxes by confidence.
+            sorted_indexes = torch.argsort(new_all_class_predictions[:, :, -1], descending=True)
+
+            for frame_index in range(len(self.all_frame_indexes)):
+                for box_index in range(NUM_QUERIES):
+                    sorted_new_all_box_predictions[frame_index][box_index] = new_all_box_predictions[frame_index][sorted_indexes[frame_index][box_index]]
+                    sorted_new_all_class_predictions[frame_index][box_index] = new_all_class_predictions[frame_index][sorted_indexes[frame_index][box_index]]
+
+            sorted_new_all_box_predictions.reshape((len(self.dataset), NUM_QUERIES * 4))
+            sorted_new_all_class_predictions.reshape((len(self.dataset), NUM_QUERIES * (NUM_CLASSES + 1)))
+
+            save_probabilities_and_labels(self.dataset, self.all_frame_indexes,
+                                          sorted_new_all_class_predictions.tolist(),
+                                          sorted_new_all_box_predictions.tolist(),
                                           output_dir=self.evaluation_out_dir, from_logits=False)
 
             if options["inference_split"] == "VALID":
@@ -281,8 +315,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         return self.batch_predictions_formatted.flatten(start_dim=0, end_dim=1).cpu().detach().numpy().tolist()
 
     def format_batch_results(self, options={}):
-        box_predictions = numpy.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, 4), dtype=numpy.float32)
-        class_predictions = numpy.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, int(options["class-size"]) - 4), dtype=numpy.float32)
+        box_predictions = np.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, 4), dtype=np.float32)
+        class_predictions = np.zeros(shape=(int(options["batch-size"]), NUM_QUERIES, int(options["class-size"]) - 4), dtype=np.float32)
 
         line_count = 0
         predictions_index = 0
