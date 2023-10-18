@@ -83,7 +83,10 @@ VIDEO_PARTITIONS = {
                   "2015-02-06-13-57-16_stereo_centre_02",
                   "2015-02-13-09-16-26_stereo_centre_05",
                   "2015-02-24-12-32-19_stereo_centre_04",
-                  "2015-03-03-11-31-36_stereo_centre_01"],
+                  "2015-03-03-11-31-36_stereo_centre_01",
+                  "2014-06-26-09-53-12_stereo_centre_02",
+                  "2014-11-25-09-18-32_stereo_centre_04",
+                  "2015-02-13-09-16-26_stereo_centre_02"],
         "VALID": ["2014-06-26-09-53-12_stereo_centre_02",
                   "2014-11-25-09-18-32_stereo_centre_04",
                   "2015-02-13-09-16-26_stereo_centre_02"],
@@ -288,6 +291,9 @@ def write_pkl_file(path, data):
     with open(path, "wb") as file:
         pickle.dump(data, file)
 
+def load_pkl_file(path):
+    with open(path, "rb") as file:
+        return pickle.load(file)
 
 def load_csv_file(path, delimiter=','):
     with open(path, 'r') as file:
