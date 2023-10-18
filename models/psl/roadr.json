@@ -23,18 +23,18 @@
     "rules": [
       "1.0: Neural(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
 
-      "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}"
+      "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}",
+      "1.0: Neural(FrameID, BoundingBoxID, +Class) >= 1 - Neural(FrameID, BoundingBoxID, '8') - Neural(FrameID, BoundingBoxID, '9') ^2 {Class: Location(Class)}"
     ]
   },
   "infer": {
     "rules": [
-      "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class) ^2",
+      "1.0: Neural(FrameID, BoundingBoxID, Class) = Label(FrameID, BoundingBoxID, Class)",
 
       "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
 
       "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}",
-      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') . {Class: Location(Class)}",
-      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}"
+      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}"
     ]
   },
   "predicates": {
