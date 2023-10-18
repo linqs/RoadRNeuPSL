@@ -38,7 +38,7 @@ DEFAULT_PARAMETERS = {
 
 
 def build_model():
-    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
+    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-101",
                                                   num_labels=NUM_CLASSES,
                                                   revision="no_timm",
                                                   ignore_mismatched_sizes=True).to(get_torch_device())
