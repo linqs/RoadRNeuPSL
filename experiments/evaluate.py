@@ -41,17 +41,23 @@ from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
 
 
-def sort_detections_in_frames(pred_labels, boxes):
+def sort_detections_in_frames(pred_labels, pred_boxes):
+    """
+    Sorts the detections in each frame by their confidence score.
+    :param pred_labels: List of lists of predicted labels.
+    :param pred_boxes: List of lists of predicted boxes.
+    :return: Sorted lists of predicted labels and boxes.
+    """
     sorted_boxes = []
-    sorted_logits = []
+    sorted_labels = []
 
-    for frame_pred_labels, frame_boxes in zip(pred_labels, boxes):
-        frame_pred_labels, frame_boxes = zip(*sorted(zip(frame_pred_labels, frame_boxes), key=lambda x: x[0][-1], reverse=True))
+    for frame_pred_labels, frame_pred_boxes in zip(pred_labels, pred_boxes):
+        frame_pred_labels, frame_pred_boxes = zip(*sorted(zip(frame_pred_labels, frame_pred_boxes), key=lambda x: x[0][-1], reverse=True))
 
-        sorted_boxes.append(frame_boxes)
-        sorted_logits.append(frame_pred_labels)
+        sorted_boxes.append(frame_pred_boxes)
+        sorted_labels.append(frame_pred_labels)
 
-    return sorted_boxes, sorted_logits
+    return sorted_boxes, sorted_labels
 
 
 def evaluate_dataset(dataset, arguments):
