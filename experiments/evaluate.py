@@ -14,10 +14,8 @@ import logger
 from data.roadr_dataset import RoadRDataset
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
-from models.analysis import ratio_to_pixel_coordinates
 from models.evaluation import count_violated_constraints
 from models.evaluation import filter_map_pred_and_truth
-from models.evaluation import load_ground_truth_for_detections
 from models.evaluation import mean_average_precision
 from models.evaluation import precision_recall_f1
 from models.trainer import Trainer
@@ -37,11 +35,23 @@ from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_SAVED_IMAGES
-from utils import PREDICTION_LABELS_JSON_FILENAME
 from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
+
+
+def sort_detections_in_frames(pred_labels, boxes):
+    sorted_boxes = []
+    sorted_logits = []
+
+    for frame_pred_labels, frame_boxes in zip(pred_labels, boxes):
+        frame_pred_labels, frame_boxes = zip(*sorted(zip(frame_pred_labels, frame_boxes), key=lambda x: x[0][-1], reverse=True))
+
+        sorted_boxes.append(frame_boxes)
+        sorted_logits.append(frame_pred_labels)
+
+    return sorted_boxes, sorted_logits
 
 
 def evaluate_dataset(dataset, arguments):
@@ -64,7 +74,11 @@ def evaluate_dataset(dataset, arguments):
 
     frame_indexes, boxes, logits, _ = trainer.eval(dataloader, calculate_loss=False, keep_predictions=True)
 
-    write_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME), {"frame_indexes": frame_indexes, "logits": logits, "boxes": boxes})
+    sorted_boxes, sorted_logits = sort_detections_in_frames(logits, boxes)
+    class_predictions = torch.sigmoid(torch.tensor(sorted_logits)).tolist()
+    frame_ids = [dataset.get_frame_id(frame_index) for frame_index in frame_indexes]
+
+    write_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME), {"frame_ids": frame_ids, "frame_indexes": frame_indexes, "box_predictions": sorted_boxes, "class_predictions": class_predictions}, indent=None)
 
 
 def calculate_metrics(dataset, output_dir):
@@ -75,23 +89,30 @@ def calculate_metrics(dataset, output_dir):
 
     logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
     filtered_pred, filtered_truth = filter_map_pred_and_truth(dataset,
-                                                              torch.Tensor(predictions["frame_indexes"]),
+                                                              predictions["frame_indexes"],
                                                               torch.Tensor(predictions["box_predictions"]),
                                                               torch.Tensor(predictions["class_predictions"]),
-                                                              IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
+                                                              IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
     mean_avg_prec = mean_average_precision(filtered_pred, filtered_truth, IOU_THRESHOLD)
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
-    precision, recall, f1 = precision_recall_f1(dataset, predictions["class_predictions"], IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
+    precision, recall, f1 = precision_recall_f1(dataset,
+                                                predictions["frame_indexes"],
+                                                predictions["box_predictions"],
+                                                predictions["class_predictions"],
+                                                IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
     logging.info("Precision: %s" % precision)
     logging.info("Recall: %s" % recall)
     logging.info("F1: %s" % f1)
 
     logging.info("Counting constraint violations.")
-    violations = count_violated_constraints(predictions["class_predictions"], load_constraint_file(HARD_CONSTRAINTS_PATH))
-    logging.info("Number of constraint violations: {}".format(violations[0]))
-    logging.info("Number of frames with constraint violations: {}".format(violations[1]))
+    violations = count_violated_constraints(load_constraint_file(HARD_CONSTRAINTS_PATH),
+                                            predictions["frame_indexes"],
+                                            predictions["class_predictions"],
+                                            LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
+    logging.info("Constraint violations: {}".format(violations[0]))
+    logging.info("Frames with constraint violations: {}".format(violations[1]))
     logging.info("Constraint violation dict: {}".format(violations[2]))
 
     metrics = {
@@ -99,32 +120,13 @@ def calculate_metrics(dataset, output_dir):
         "precision": precision,
         "recall": recall,
         "f1": f1,
-        "num_constraint_violations": num_constraint_violations,
-        "num_frames_with_violation": num_frames_with_violation,
-        "constraint_violation_dict": constraint_violation_dict
+        "constraint_violations": violations[0],
+        "frames_with_violations": violations[1],
+        "constraint_violation_dict": violations[2]
     }
 
     logging.info("Saving metrics to %s" % os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
     write_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME), metrics)
-
-
-def save_images(dataset, arguments):
-    if arguments.save_images.upper() == "NONE":
-        pass
-    elif arguments.save_images.upper() == "BOXES":
-        save_images_with_bounding_boxes(dataset, arguments.output_dir, False,
-                                        arguments.max_saved_images,
-                                        LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
-                                        write_ground_truth=(not arguments.test_evaluation),
-                                        test=arguments.test_evaluation)
-    elif arguments.save_images.upper() == "BOXES_AND_LABELS":
-        save_images_with_bounding_boxes(dataset, arguments.output_dir, True,
-                                        arguments.max_saved_images,
-                                        LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
-                                        write_ground_truth=(not arguments.test_evaluation),
-                                        test=arguments.test_evaluation)
-    else:
-        raise ValueError("Invalid save_images argument: %s" % arguments.save_images)
 
 
 def main(arguments):
@@ -150,7 +152,9 @@ def main(arguments):
         calculate_metrics(dataset, arguments.output_dir)
 
     logging.info("Saving images with bounding boxes.")
-    save_images(dataset, arguments)
+    save_images_with_bounding_boxes(dataset, arguments.output_dir, arguments.max_saved_images,
+                                    LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
+                                    test=arguments.test_evaluation)
 
 
 def _load_args():

@@ -17,13 +17,14 @@ from models.trainer import Trainer
 from utils import get_torch_device
 from utils import load_csv_file
 from utils import seed_everything
+from utils import write_json_file
 from utils import BASE_RESULTS_DIR
-from utils import NUM_CLASSES
-from utils import SEED
-from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_TRAINING_SUMMARY_FILENAME
+from utils import NUM_CLASSES
+from utils import SEED
+from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
 
 
@@ -33,14 +34,20 @@ DEFAULT_PARAMETERS = {
     "batch-size": 2,
     "step-size": 500,
     "gamma": 1.0,
-    "epochs": 50
+    "pretrained": "facebook/detr-resnet-101",
+    "revision": "no_timm"
 }
 
 
 def build_model():
-    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet-101",
+    if DEFAULT_PARAMETERS["revision"] == "no_timm":
+        return DetrForObjectDetection.from_pretrained(DEFAULT_PARAMETERS["pretrained"],
+                                                      num_labels=NUM_CLASSES,
+                                                      revision=DEFAULT_PARAMETERS["revision"],
+                                                      ignore_mismatched_sizes=True).to(get_torch_device())
+
+    return DetrForObjectDetection.from_pretrained(DEFAULT_PARAMETERS["pretrained"],
                                                   num_labels=NUM_CLASSES,
-                                                  revision="no_timm",
                                                   ignore_mismatched_sizes=True).to(get_torch_device())
 
 
@@ -48,8 +55,6 @@ def run_setting(arguments, train_dataset, validation_dataset, parameters, parame
     if os.path.isfile(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME)) and not arguments.resume_from_checkpoint:
         logging.info("Skipping training for %s, already exists." % (parameters_string,))
         return float(load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
-
-    os.makedirs(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string), exist_ok=True)
 
     train_dataloader = DataLoader(train_dataset, batch_size=parameters["batch-size"], shuffle=True,
                                   num_workers=int(os.cpu_count()) - 2, prefetch_factor=4, persistent_workers=True)
@@ -66,7 +71,7 @@ def run_setting(arguments, train_dataset, validation_dataset, parameters, parame
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
 
     trainer = Trainer(model, optimizer, lr_scheduler, get_torch_device(), os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string))
-    trainer.train(train_dataloader, validation_dataloader, n_epochs=parameters["epochs"])
+    trainer.train(train_dataloader, validation_dataloader, n_epochs=arguments.epochs)
 
     return float(load_csv_file(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINING_SUMMARY_FILENAME))[1][0])
 
@@ -86,6 +91,12 @@ def main(arguments):
                                  max_frames=arguments.max_frames)
     validation_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["VALID"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
                                       max_frames=arguments.max_frames)
+
+    os.makedirs(os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR), exist_ok=True)
+
+    config = vars(arguments)
+    config["default_parameters"] = DEFAULT_PARAMETERS
+    write_json_file(os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR, "config.json"), config)
 
     loss = run_setting(arguments, train_dataset, validation_dataset, DEFAULT_PARAMETERS, NEURAL_TRAINED_MODEL_DIR)
     logging.info("Final loss: %f" % (loss,))
@@ -107,6 +118,9 @@ def _load_args():
     parser.add_argument("--max-frames", dest="max_frames",
                         action="store", type=int, default=0,
                         help="Maximum number of frames to use from each videos. Default is 0, which uses all frames.")
+    parser.add_argument("--epochs", dest="epochs",
+                        action="store", type=int, default=50,
+                        help="Number of epochs to train for.")
     parser.add_argument("--resume-from-checkpoint", dest="resume_from_checkpoint",
                         action="store", type=bool, default=False,
                         help="Resume training from the most recent checkpoint.")
