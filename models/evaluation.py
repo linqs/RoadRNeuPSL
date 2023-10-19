@@ -8,50 +8,9 @@ from models.losses import single_box_iou
 from utils import pixel_to_ratio_coordinates
 from utils import ratio_to_pixel_coordinates
 from utils import AGENT_CLASSES
-from utils import IOU_THRESHOLD
-from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NUM_CLASSES
 
-
-def filter_detections(frame_indexes, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, num_classes=NUM_CLASSES):
-    """
-    Filters detections by first removing all detections with a confidence score below a threshold and then applying non-maximum suppression.
-    :param frame_indexes: List of frame indexes (N, 2) for which the detections were computed.
-    :param box_predictions: Tensor of shape (N, 4) containing the predicted bounding boxes.
-    :param class_predictions: Tensor of shape (N, C) containing the predicted class probabilities.
-    :param iou_threshold: Threshold for the IoU.
-    :param label_confidence_threshold: Threshold for the confidence score.
-    :param num_classes: Number of classes in the dataset.
-    """
-    filtered_detections = []
-    filtered_detection_indexes = []
-
-    for frame_index in range(frame_indexes.shape[0]):
-        frame_boxes = box_predictions[frame_index]
-
-        filtered_detection_indexes.append(int(frame_indexes[frame_index]))
-
-        for class_index in range(num_classes):
-            frame_scores = class_predictions[frame_index, :, class_index]
-
-            mask_frame_scores = frame_scores.gt(label_confidence_threshold)
-
-            masked_frame_boxes = frame_boxes[mask_frame_scores]
-            masked_frame_scores = frame_scores[mask_frame_scores]
-
-            kept_element_indexes = nms(boxes=masked_frame_boxes, scores=masked_frame_scores, iou_threshold=iou_threshold)
-
-            if len(kept_element_indexes) == 0:
-                filtered_detections.append({'boxes': torch.Tensor([]), 'scores': torch.Tensor([]), 'labels': torch.Tensor([])})
-                continue
-
-            filtered_frame_boxes = masked_frame_boxes[kept_element_indexes]
-            filtered_frame_scores = masked_frame_scores[kept_element_indexes]
-            filtered_frame_labels = torch.Tensor([int(class_index)] * len(filtered_frame_boxes)).type(torch.int64)
-
-            filtered_detections.append({'boxes': filtered_frame_boxes, 'scores': filtered_frame_scores, 'labels': filtered_frame_labels})
-
-    return filtered_detections, filtered_detection_indexes
+EPSILON = 1e-7
 
 
 def agent_nms(box_predictions, box_confidence_scores, class_predictions, iou_threshold=0.6, label_threshold=0.5):
@@ -91,104 +50,125 @@ def agent_nms(box_predictions, box_confidence_scores, class_predictions, iou_thr
     return kept_element_indexes
 
 
-def load_ground_truth_for_detections(dataset, indexes, num_classes=NUM_CLASSES):
+def filter_map_pred_and_truth(dataset, frame_indexes, box_predictions, class_predictions, iou_threshold, confidence_threshold, num_classes=NUM_CLASSES):
     """
-    Loads the ground truth labels for the given detections.
-    :param dataset: Dataset for which the labels should be loaded.
-    :param indexes: List of indexes for which the detections were computed.
+    Filters predictions using non-maximum suppression and returns the predictions and truth in the format
+    required for the mean average precision metric.
+    :param dataset: Dataset for which the detections were computed.
+    :param box_predictions: Tensor of shape (N, 4) containing the predicted bounding boxes.
+    :param class_predictions: Tensor of shape (N, C) containing the predicted class probabilities.
+    :param iou_threshold: Threshold for the IoU.
+    :param confidence_threshold: Threshold for box and class confidence.
     :param num_classes: Number of classes in the dataset.
+    :return: Filtered predictions and truth.
     """
-    ground_truth = []
+    filtered_pred = []
+    filtered_truth = []
 
-    for frame_index in indexes:
+    for frame_index in frame_indexes:
+        frame_pred_labels, frame_pred_boxes = class_predictions[frame_index], box_predictions[frame_index]
         frame_truth_labels, frame_truth_boxes = dataset.get_labels_and_boxes(frame_index)
 
-        mask_frame_boxes = frame_truth_boxes.sum(dim=1).gt(0)
+        mask_frame_pred = frame_pred_labels[:, -1].gt(confidence_threshold)
+        mask_frame_truth = frame_truth_boxes.sum(dim=1).gt(EPSILON)
 
-        frame_truth_boxes = frame_truth_boxes[mask_frame_boxes]
-        frame_truth_labels = frame_truth_labels[mask_frame_boxes]
+        frame_pred_labels, frame_pred_boxes = frame_pred_labels[mask_frame_pred], frame_pred_boxes[mask_frame_pred]
+        frame_truth_labels, frame_truth_boxes = frame_truth_labels[mask_frame_truth], frame_truth_boxes[mask_frame_truth]
+
+        frame_pred_boxes = ratio_to_pixel_coordinates(frame_pred_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+        frame_truth_boxes = ratio_to_pixel_coordinates(frame_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
 
         for class_index in range(num_classes):
-            class_frame_truth_labels = frame_truth_labels[:, class_index]
+            class_pred_labels = frame_pred_labels[:, class_index]
+            class_truth_labels = frame_truth_labels[:, class_index]
 
-            mask_class_frame_truth_labels = class_frame_truth_labels.gt(0.5)
+            mask_class_pred = class_pred_labels.gt(confidence_threshold)
+            mask_class_labels = class_truth_labels.gt(EPSILON)
 
-            if class_frame_truth_labels.sum() == 0:
-                ground_truth.append({'boxes': torch.Tensor([]), 'labels': torch.Tensor([])})
-                continue
+            class_pred_labels, class_pred_boxes = class_pred_labels[mask_class_pred], frame_pred_boxes[mask_class_pred]
 
-            class_frame_truth_boxes = frame_truth_boxes[mask_class_frame_truth_labels]
-            scaled_class_frame_truth_boxes = ratio_to_pixel_coordinates(
-                class_frame_truth_boxes, dataset.image_height() / dataset.image_resize,
-                dataset.image_width() / dataset.image_resize)
+            kept_element_indexes = nms(boxes=class_pred_boxes, scores=class_pred_labels, iou_threshold=iou_threshold)
 
-            class_frame_frame_labels = torch.Tensor([int(class_index)] * len(scaled_class_frame_truth_boxes)).type(torch.int64)
+            filtered_detection = {'boxes': torch.Tensor([]), 'scores': torch.Tensor([]), 'labels': torch.Tensor([])}
 
-            ground_truth.append({'boxes': scaled_class_frame_truth_boxes, 'labels': class_frame_frame_labels})
+            if len(kept_element_indexes) > 0:
+                filtered_detection = {"boxes": class_pred_boxes[kept_element_indexes],
+                                      "scores": class_pred_labels[kept_element_indexes],
+                                      "labels": torch.Tensor([int(class_index)] * len(class_pred_boxes[kept_element_indexes]))}
 
-    return ground_truth
+            filtered_pred.append(filtered_detection)
+
+            filtered_label = {'boxes': torch.Tensor([]), 'labels': torch.Tensor([])}
+            if len(mask_class_labels) > 0:
+                filtered_label = {"boxes": frame_truth_boxes[mask_class_labels],
+                                   "labels": torch.Tensor([int(class_index)] * len(frame_truth_boxes))}
+
+            filtered_truth.append(filtered_label)
 
 
-def mean_average_precision(ground_truths, detections, iou_threshold=0.5):
+    return filtered_pred, filtered_truth
+
+
+def mean_average_precision(pred, truth, iou_threshold=0.5):
     """
-    Computes the mean average precision (mAP) for a given set of predictions and ground truths.
-    :param ground_truths: List containing the ground truths.
-    :param detections: List containing the detections.
+    Computes the mean average precision (mAP) for a given set of predictions and truth.
+    :param truth: List of dictionaries containing the ground truths.
+    :param pred: List of dictionaries containing the predictions.
     :param iou_threshold: Threshold for the IoU.
     """
     map_metric = MeanAveragePrecision(iou_thresholds=[iou_threshold], iou_type="bbox", box_format="xyxy")
 
-    map_metric.update(detections, ground_truths)
+    map_metric.update(pred, truth)
     values = map_metric.compute()
 
     return float(values['map'])
 
 
-def precision_recall_f1(dataset, predictions):
+def precision_recall_f1(dataset, class_predictions, iou_threshold, label_confidence_threshold):
     """
     Computes the precision, recall and f1 score for a given set of predictions.
     :param dataset: Dataset for which the predictions were computed.
-    :param predictions: Dictionary containing the predictions.
+    :param class_predictions: Dictionary containing the predictions.
+    :param iou_threshold: Threshold for the IoU.
+    :param label_confidence_threshold: Threshold for the label confidence score.
     :return: Tuple containing the precision, recall and f1 score.
     """
     tp = 0
     fp = 0
     fn = 0
 
-    for video_id in predictions:
-        for frame_id in predictions[video_id]:
+    for video_id in class_predictions:
+        for frame_id in class_predictions[video_id]:
             frame_index = dataset.get_frame_index((video_id, frame_id))
             truth_labels, truth_boxes = dataset.get_labels_and_boxes(frame_index)
 
             matched_box_indexes = set()
-            for index in range(len(predictions[video_id][frame_id])):
-                if sum(predictions[video_id][frame_id][index]['labels']) < 0.0001:
+            for index_i in range(len(class_predictions[video_id][frame_id])):
+                if sum(class_predictions[video_id][frame_id][index_i]['labels']) < EPSILON:
                     break
-                detected_box = pixel_to_ratio_coordinates(torch.Tensor([predictions[video_id][frame_id][index]['bbox']]),
-                                                          dataset.image_height() / dataset.image_resize,
-                                                          dataset.image_width() / dataset.image_resize)
+                detected_box = torch.Tensor([class_predictions[video_id][frame_id][index_i]['bbox']])
 
                 max_box_iou = 0
                 max_truth_label = [0] * NUM_CLASSES
                 max_truth_box = None
-                for index_j in range(len(truth_labels)):
-                    if index_j in matched_box_indexes:
+                for index in range(len(truth_labels)):
+                    if index in matched_box_indexes:
                         continue
-                    truth_box = torch.Tensor([truth_boxes[index_j].tolist()])
+                    truth_box = torch.Tensor([truth_boxes[index].tolist()])
                     if truth_box.sum() == 0:
                         break
 
                     box_iou = single_box_iou(truth_box, detected_box)
-                    if box_iou > IOU_THRESHOLD:
+                    if box_iou > iou_threshold:
                         if box_iou > max_box_iou:
                             max_box_iou = box_iou
-                            max_truth_box = index_j
-                            max_truth_label = truth_labels[index_j]
+                            max_truth_box = index
+                            max_truth_label = truth_labels[index]
 
                 if max_truth_box is not None:
                     matched_box_indexes.add(max_truth_box)
 
-                detected = [1 if predictions[video_id][frame_id][index]['labels'][label] > LABEL_CONFIDENCE_THRESHOLD else 0 for label in range(NUM_CLASSES)]
+                detected = [1 if class_predictions[video_id][frame_id][index_i]['labels'][label] > label_confidence_threshold else 0 for label in range(NUM_CLASSES)]
                 for class_index in range(NUM_CLASSES):
                     if max_truth_label[class_index] == 1 and detected[class_index] == 1:
                         tp += 1
@@ -197,13 +177,13 @@ def precision_recall_f1(dataset, predictions):
                     elif max_truth_label[class_index] == 0 and detected[class_index] == 1:
                         fp += 1
 
-            for index_j in range(len(truth_labels)):
-                if index_j in matched_box_indexes:
+            for index in range(len(truth_labels)):
+                if index in matched_box_indexes:
                     continue
-                if truth_labels[index_j].sum() == 0:
+                if truth_labels[index].sum() == 0:
                     break
                 for class_index in range(NUM_CLASSES):
-                    if truth_labels[index_j][class_index] == 1:
+                    if truth_labels[index][class_index] == 1:
                         fn += 1
 
     if tp + fp == 0:
@@ -224,11 +204,13 @@ def precision_recall_f1(dataset, predictions):
     return precision, recall, f1_score
 
 
-def count_violated_constraints(predictions, constraints):
+def count_violated_constraints(predictions, constraints, iou_threshold, label_confidence_threshold):
     """
     Counts the number of violated pairwise constraints.
     :param predictions: Dictionary containing the predictions.
     :param constraints: List of constraints.
+    :param iou_threshold: Threshold for the IoU.
+    :param label_confidence_threshold: Threshold for the label confidence score.
     :return: Number of violated constraints, Number of frames with a violation.
     """
     num_constraint_violations = 0
@@ -287,4 +269,4 @@ def count_violated_constraints(predictions, constraints):
             if frame_violation:
                 num_frames_with_violation += 1
 
-    return num_constraint_violations, num_frames_with_violation, constraint_violation_dict
+    return (num_constraint_violations, num_frames_with_violation, constraint_violation_dict)

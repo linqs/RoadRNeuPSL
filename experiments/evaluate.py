@@ -16,7 +16,7 @@ from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.analysis import ratio_to_pixel_coordinates
 from models.evaluation import count_violated_constraints
-from models.evaluation import filter_detections
+from models.evaluation import filter_map_pred_and_truth
 from models.evaluation import load_ground_truth_for_detections
 from models.evaluation import mean_average_precision
 from models.evaluation import precision_recall_f1
@@ -26,7 +26,6 @@ from utils import load_constraint_file
 from utils import load_json_file
 from utils import seed_everything
 from utils import write_json_file
-from utils import write_pkl_file
 from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
 from utils import EVALUATION_METRICS_FILENAME
@@ -39,101 +38,15 @@ from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_SAVED_IMAGES
 from utils import PREDICTION_LABELS_JSON_FILENAME
-from utils import PREDICTION_LABELS_PKL_FILENAME
-from utils import PREDICTION_PROBABILITIES_JSON_FILENAME
-from utils import PREDICTION_PROBABILITIES_PKL_FILENAME
-from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
+from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
 
 
-def save_probabilities_and_labels(dataset, frame_indexes, logits, boxes, output_dir, from_logits=True):
-    probabilities_output_dict = {}
-    probabilities_with_confidence_output_dict = {}
-    labels_output_dict = {}
-    submission_probabilities = {}
-    submission_labels = {}
-
-    for frame_index, frame_logits, frame_boxes in zip(frame_indexes, logits, boxes):
-        frame_id = dataset.get_frame_id(frame_index)
-
-        if frame_id[0] not in probabilities_output_dict:
-            probabilities_output_dict[frame_id[0]] = {}
-            probabilities_with_confidence_output_dict[frame_id[0]] = {}
-            labels_output_dict[frame_id[0]] = {}
-            submission_probabilities[frame_id[0]] = {}
-            submission_labels[frame_id[0]] = {}
-
-        frame_logits, frame_boxes = zip(*sorted(zip(frame_logits, frame_boxes), key=lambda x: x[0][-1], reverse=True))
-        scaled_frame_boxes = ratio_to_pixel_coordinates(torch.tensor(frame_boxes),
-                                                        dataset.image_height() / dataset.image_resize,
-                                                        dataset.image_width() / dataset.image_resize).tolist()
-
-        probabilities_output_dict[frame_id[0]][frame_id[1]] = []
-        probabilities_with_confidence_output_dict[frame_id[0]][frame_id[1]] = []
-        labels_output_dict[frame_id[0]][frame_id[1]] = []
-        submission_probabilities[frame_id[0]][frame_id[1]] = []
-        submission_labels[frame_id[0]][frame_id[1]] = []
-        for logits, box in zip(frame_logits, scaled_frame_boxes):
-            if from_logits:
-                prediction_probabilities = torch.nn.Sigmoid()(torch.Tensor(logits)).tolist()
-            else:
-                prediction_probabilities = logits
-
-            if prediction_probabilities[-1] >= BOX_CONFIDENCE_THRESHOLD:
-                probabilities_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities[:-1], "bbox": box})
-                submission_probabilities[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities[:-1], "bbox": box})
-
-                predicted_labels = []
-                for i in range(len(prediction_probabilities) - 1):
-                    if prediction_probabilities[i] > LABEL_CONFIDENCE_THRESHOLD:
-                        predicted_labels.append(i)
-
-                labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
-                submission_labels[frame_id[0]][frame_id[1]].append({"labels": predicted_labels, "bbox": box})
-            else:
-                probabilities_output_dict[frame_id[0]][frame_id[1]].append({"labels": [0.0] * len(prediction_probabilities[:-1]), "bbox": box})
-                labels_output_dict[frame_id[0]][frame_id[1]].append({"labels": [], "bbox": box})
-
-            probabilities_with_confidence_output_dict[frame_id[0]][frame_id[1]].append({"labels": prediction_probabilities, "bbox": box})
-
-    logging.info("Saving pkl prediction probabilities to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME))
-    write_pkl_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_PKL_FILENAME), submission_probabilities)
-
-    logging.info("Saving json prediction probabilities to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME), probabilities_output_dict)
-
-    logging.info("Saving json prediction probabilities with confidence to %s" % os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME), probabilities_with_confidence_output_dict)
-
-    logging.info("Saving pkl prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME))
-    write_pkl_file(os.path.join(output_dir, PREDICTION_LABELS_PKL_FILENAME), submission_labels)
-
-    logging.info("Saving json prediction labels to %s" % os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
-    write_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME), labels_output_dict)
-
-
-def format_saved_predictions(predictions, dataset):
-    frame_indexes, box_predictions, class_predictions = [], [], []
-
-    for video_index, video_predictions in predictions.items():
-        for frame_index, frame_predictions in video_predictions.items():
-            box_predictions.append([])
-            class_predictions.append([])
-
-            frame_indexes.append(dataset.get_frame_index((video_index, frame_index)))
-            for frame_prediction in frame_predictions:
-                box_predictions[-1].append(frame_prediction["bbox"])
-                class_predictions[-1].append(frame_prediction["labels"])
-
-    return frame_indexes, class_predictions, box_predictions
-
-
-def run_neural_inference(dataset, arguments):
-    if os.path.isfile(os.path.join(arguments.output_dir, PREDICTION_LABELS_JSON_FILENAME)) and \
-            os.path.isfile(os.path.join(arguments.output_dir, PREDICTION_LABELS_PKL_FILENAME)):
-        logging.info("Skipping neural inference for %s, already exists." % (arguments.output_dir,))
+def evaluate_dataset(dataset, arguments):
+    if os.path.isfile(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME)):
+        logging.info("Skipping neural evaluation for %s, already exists." % (arguments.output_dir,))
         return
 
     os.makedirs(os.path.join(arguments.output_dir), exist_ok=True)
@@ -151,42 +64,35 @@ def run_neural_inference(dataset, arguments):
 
     frame_indexes, boxes, logits, _ = trainer.eval(dataloader, calculate_loss=False, keep_predictions=True)
 
-    save_probabilities_and_labels(dataset, frame_indexes, logits, boxes, output_dir=arguments.output_dir)
+    write_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME), {"frame_indexes": frame_indexes, "logits": logits, "boxes": boxes})
 
 
 def calculate_metrics(dataset, output_dir):
-    if os.path.isfile(os.path.join(output_dir, EVALUATION_METRICS_FILENAME)):
-        logging.info("Skipping calculation metrics for %s, already exists." % (os.path.join(output_dir, EVALUATION_METRICS_FILENAME),))
-
-        results = load_json_file(os.path.join(output_dir, EVALUATION_METRICS_FILENAME))
-        logging.info("Saved metrics: %s" % results)
-        return
-
     logging.info("Loading predicted probabilities and labels.")
-    predicted_probabilities = load_json_file(os.path.join(output_dir, PREDICTION_PROBABILITIES_JSON_FILENAME))
-    predicted_labels = load_json_file(os.path.join(output_dir, PREDICTION_LABELS_JSON_FILENAME))
-
-    frame_indexes, class_predictions, box_predictions = format_saved_predictions(predicted_probabilities, dataset)
+    predictions = load_json_file(os.path.join(output_dir, PREDICTIONS_JSON_FILENAME))
 
     logging.info("Calculating metrics.")
 
     logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
-    filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
-    filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
-    mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
+    filtered_pred, filtered_truth = filter_map_pred_and_truth(dataset,
+                                                              torch.Tensor(predictions["frame_indexes"]),
+                                                              torch.Tensor(predictions["box_predictions"]),
+                                                              torch.Tensor(predictions["class_predictions"]),
+                                                              IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
+    mean_avg_prec = mean_average_precision(filtered_pred, filtered_truth, IOU_THRESHOLD)
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
-    precision, recall, f1 = precision_recall_f1(dataset, predicted_probabilities)
+    precision, recall, f1 = precision_recall_f1(dataset, predictions["class_predictions"], IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
     logging.info("Precision: %s" % precision)
     logging.info("Recall: %s" % recall)
     logging.info("F1: %s" % f1)
 
     logging.info("Counting constraint violations.")
-    num_constraint_violations, num_frames_with_violation, constraint_violation_dict = count_violated_constraints(predicted_labels, load_constraint_file(HARD_CONSTRAINTS_PATH))
-    logging.info("Number of constraint violations: {}".format(num_constraint_violations))
-    logging.info("Number of frames with constraint violations: {}".format(num_frames_with_violation))
-    logging.info("Constraint violation dict: {}".format(constraint_violation_dict))
+    violations = count_violated_constraints(predictions["class_predictions"], load_constraint_file(HARD_CONSTRAINTS_PATH))
+    logging.info("Number of constraint violations: {}".format(violations[0]))
+    logging.info("Number of frames with constraint violations: {}".format(violations[1]))
+    logging.info("Constraint violation dict: {}".format(violations[2]))
 
     metrics = {
         "mean_avg_prec": mean_avg_prec,
@@ -237,7 +143,7 @@ def main(arguments):
                            max_frames=arguments.max_frames, test=arguments.test_evaluation)
 
     logging.info("Evaluating dataset.")
-    run_neural_inference(dataset, arguments)
+    evaluate_dataset(dataset, arguments)
 
     logging.info("Calculating metrics.")
     if not arguments.test_evaluation:

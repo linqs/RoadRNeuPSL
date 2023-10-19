@@ -10,7 +10,7 @@ from utils import ratio_to_pixel_coordinates
 from utils import BASE_RGB_IMAGES_DIR
 from utils import BASE_TEST_RGB_IMAGES_DIR
 from utils import LABEL_MAPPING
-from utils import PREDICTION_PROBABILITIES_JSON_FILENAME
+from utils import PREDICTIONS_JSON_FILENAME
 from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
 
 BORDER_LINEWIDTH = 1

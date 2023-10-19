@@ -17,8 +17,7 @@ from utils import NEURAL_VALIDATION_SUMMARY_FILENAME
 
 
 class Trainer:
-    def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
-                 scheduler, device: torch.device, out_directory: str):
+    def __init__(self, model, optimizer, scheduler, device, out_directory):
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
