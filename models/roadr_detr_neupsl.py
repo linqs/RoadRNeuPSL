@@ -15,7 +15,6 @@ import logger
 
 from data.roadr_dataset import RoadRDataset
 from experiments.evaluate import calculate_metrics
-from experiments.evaluate import save_probabilities_and_labels
 from experiments.pretrain import build_model
 from models.analysis import save_images_with_bounding_boxes
 from models.evaluation import agent_nms
@@ -26,6 +25,7 @@ from utils import load_json_file
 from utils import pixel_to_ratio_coordinates
 from utils import save_model_state
 from utils import seed_everything
+from utils import write_json_file
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
@@ -42,7 +42,7 @@ from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
-from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
+from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
@@ -103,9 +103,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         if options["load-predictions"] == "true":
             assert self.application != "learning"
             if (options["inference_split"] == "VALID"):
-                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTIONS_JSON_FILENAME)
             elif (options["inference_split"] == "TEST"):
-                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTIONS_JSON_FILENAME)
             else:
                 raise ValueError("Invalid inference split: {0}".format(options["inference_split"]))
             self.model = LoadPredictionsModel(predictions_path, self.dataset)
@@ -246,17 +246,13 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             sorted_new_all_box_predictions.reshape((len(self.dataset), NUM_QUERIES * 4))
             sorted_new_all_class_predictions.reshape((len(self.dataset), NUM_QUERIES * (NUM_CLASSES + 1)))
 
-            save_probabilities_and_labels(self.dataset, self.all_frame_indexes,
-                                          sorted_new_all_class_predictions.tolist(),
-                                          sorted_new_all_box_predictions.tolist(),
-                                          output_dir=self.evaluation_out_dir, from_logits=False)
+            write_json_file(os.path.join(self.evaluation_out_dir, PREDICTIONS_JSON_FILENAME), {"frame_ids": [self.dataset.get_frame_id(frame_index) for frame_index in self.all_frame_indexes], "frame_indexes": self.all_frame_indexes, "box_predictions": sorted_new_all_box_predictions.tolist(), "class_predictions": sorted_new_all_class_predictions.tolist()}, indent=None)
 
             if options["inference_split"] == "VALID":
                 calculate_metrics(self.dataset, self.evaluation_out_dir)
 
-            save_images_with_bounding_boxes(self.dataset, self.evaluation_out_dir, True,
-                                            NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
-                                            write_ground_truth=(options["inference_split"] == "VALID"),
+            save_images_with_bounding_boxes(self.dataset, self.evaluation_out_dir, NUM_SAVED_IMAGES,
+                                            LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
                                             test=(options["inference_split"] == "TEST"))
 
     def internal_next_batch(self, options={}):
