@@ -5,21 +5,16 @@ import sys
 
 import torch
 
-from torch.utils.data import DataLoader
-
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import logger
 
 from data.roadr_dataset import RoadRDataset
-from experiments.pretrain import build_model
-from models.analysis import save_images_with_bounding_boxes
+from models.evaluation import save_images_with_bounding_boxes, agent_nms
 from models.evaluation import count_violated_constraints
 from models.evaluation import filter_map_pred_and_truth
 from models.evaluation import mean_average_precision
 from models.evaluation import precision_recall_f1
-from models.trainer import Trainer
-from utils import get_torch_device
 from utils import load_constraint_file
 from utils import load_json_file
 from utils import seed_everything
@@ -34,6 +29,8 @@ from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
+from utils import NUM_CLASSES
+from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
 from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
@@ -41,56 +38,41 @@ from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
 
 
-def sort_detections_in_frames(pred_labels, pred_boxes):
-    """
-    Sorts the detections in each frame by their confidence score.
-    :param pred_labels: List of lists of predicted labels.
-    :param pred_boxes: List of lists of predicted boxes.
-    :return: Sorted lists of predicted labels and boxes.
-    """
-    sorted_boxes = []
-    sorted_labels = []
+def filter_predictions(dataset, predictions, arguments):
+    logging.info("Filtering predictions.")
+    nms_keep_indices = agent_nms(
+        np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)),
+        np.array(self.all_class_predictions)[:, :, -1].reshape((len(self.dataset), NUM_QUERIES)),
+        np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1))[:, :, :-1],
+    )
 
-    for frame_pred_labels, frame_pred_boxes in zip(pred_labels, pred_boxes):
-        frame_pred_labels, frame_pred_boxes = zip(*sorted(zip(frame_pred_labels, frame_pred_boxes), key=lambda x: x[0][-1], reverse=True))
+    new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
+    new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
 
-        sorted_boxes.append(frame_pred_boxes)
-        sorted_labels.append(frame_pred_labels)
+    # Construct the new prediction by keeping only the nms_keep_indices and padding with 0s otherwise.
+    for frame_index in range(len(self.all_frame_indexes)):
+        for box_index in range(NUM_QUERIES):
+            if box_index in nms_keep_indices[frame_index]:
+                new_all_box_predictions[frame_index][box_index] = torch.tensor(self.all_box_predictions[frame_index][box_index])
+                new_all_class_predictions[frame_index][box_index] = torch.tensor(self.all_class_predictions[frame_index][box_index])
 
-    return sorted_boxes, sorted_labels
+    sorted_new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
+    sorted_new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
 
+    # Sort boxes by confidence.
+    sorted_indexes = torch.argsort(new_all_class_predictions[:, :, -1], descending=True)
 
-def evaluate_dataset(dataset, arguments):
-    if os.path.isfile(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME)):
-        logging.info("Skipping neural evaluation for %s, already exists." % (arguments.output_dir,))
-        return
+    for frame_index in range(len(self.all_frame_indexes)):
+        for box_index in range(NUM_QUERIES):
+            sorted_new_all_box_predictions[frame_index][box_index] = new_all_box_predictions[frame_index][sorted_indexes[frame_index][box_index]]
+            sorted_new_all_class_predictions[frame_index][box_index] = new_all_class_predictions[frame_index][sorted_indexes[frame_index][box_index]]
 
-    os.makedirs(os.path.join(arguments.output_dir), exist_ok=True)
-
-    dataloader = DataLoader(dataset, batch_size=arguments.batch_size,
-                            shuffle=False, num_workers=int(os.cpu_count()) - 2,
-                            prefetch_factor=4, persistent_workers=True)
-
-    logging.info("Building and loading pre-trained model from {}.".format(arguments.saved_model_path))
-    model = build_model()
-    model.load_state_dict(torch.load(arguments.saved_model_path, map_location=get_torch_device()))
-
-    logging.info("Running neural inference with trained model {}.".format(arguments.saved_model_path))
-    trainer = Trainer(model, None, None, get_torch_device(), os.path.join(arguments.output_dir))
-
-    frame_indexes, boxes, logits, _ = trainer.eval(dataloader, calculate_loss=False, keep_predictions=True)
-
-    sorted_boxes, sorted_logits = sort_detections_in_frames(logits, boxes)
-    class_predictions = torch.sigmoid(torch.tensor(sorted_logits)).tolist()
-    frame_ids = [dataset.get_frame_id(frame_index) for frame_index in frame_indexes]
-
-    write_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME), {"frame_ids": frame_ids, "frame_indexes": frame_indexes, "box_predictions": sorted_boxes, "class_predictions": class_predictions}, indent=None)
+    sorted_new_all_box_predictions.reshape((len(self.dataset), NUM_QUERIES * 4))
+    sorted_new_all_class_predictions.reshape((len(self.dataset), NUM_QUERIES * (NUM_CLASSES + 1)))
+    return predictions
 
 
-def calculate_metrics(dataset, output_dir):
-    logging.info("Loading predicted probabilities and labels.")
-    predictions = load_json_file(os.path.join(output_dir, PREDICTIONS_JSON_FILENAME))
-
+def calculate_metrics(dataset, predictions, output_dir):
     logging.info("Calculating metrics.")
 
     logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
@@ -150,12 +132,14 @@ def main(arguments):
     dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task][arguments.eval_videos.upper()], annotations_path, arguments.image_resize,
                            max_frames=arguments.max_frames, test=arguments.test_evaluation)
 
-    logging.info("Evaluating dataset.")
-    evaluate_dataset(dataset, arguments)
+    logging.info("Loading predicted probabilities and labels.")
+    predictions = load_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME))
 
-    logging.info("Calculating metrics.")
+    if arguments.filter_predictions:
+        predictions = filter_predictions(dataset, predictions, arguments)
+
     if not arguments.test_evaluation:
-        calculate_metrics(dataset, arguments.output_dir)
+        calculate_metrics(dataset, predictions, arguments.output_dir)
 
     logging.info("Saving images with bounding boxes.")
     save_images_with_bounding_boxes(dataset, arguments.output_dir, arguments.max_saved_images,
@@ -198,6 +182,9 @@ def _load_args():
     parser.add_argument("--max-saved-images", dest="max_saved_images",
                         action="store", type=int, default=NUM_SAVED_IMAGES,
                         help="Maximum number of images saved per video.")
+    parser.add_argument("--filter-predictions", dest="filter_predictions",
+                        action="store_true", default=False,
+                        help="Turn on filtering predictions.")
 
     arguments = parser.parse_args()
 

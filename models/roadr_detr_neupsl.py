@@ -14,10 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 
 from data.roadr_dataset import RoadRDataset
-from experiments.evaluate import calculate_metrics
-from experiments.pretrain import build_model
-from models.analysis import save_images_with_bounding_boxes
-from models.evaluation import agent_nms
+from experiments.pretrain_neural import build_model
 from models.losses import detr_loss
 from utils import box_cxcywh_to_xyxy
 from utils import get_torch_device
@@ -29,7 +26,6 @@ from utils import write_json_file
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
-from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NEUPSL_TEST_INFERENCE_DIR
 from utils import NEUPSL_TRAINED_MODEL_DIR
 from utils import NEUPSL_TRAINED_MODEL_FILENAME
@@ -41,7 +37,6 @@ from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 from utils import NUM_QUERIES
-from utils import NUM_SAVED_IMAGES
 from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
@@ -216,44 +211,14 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         elif (self.application == "inference") and (not self._train):
             os.makedirs(self.evaluation_out_dir, exist_ok=True)
 
-            nms_keep_indices = agent_nms(
-                np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)),
-                np.array(self.all_class_predictions)[:, :, -1].reshape((len(self.dataset), NUM_QUERIES)),
-                np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1))[:, :, :-1],
-            )
+            predictions = {
+                "frame_ids": [self.dataset.get_frame_id(frame_index) for frame_index in range(len(self.all_frame_indexes))],
+                "frame_indexes": self.all_frame_indexes,
+                "box_predictions": np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)).tolist(),
+                "class_predictions": np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1)).tolist(),
+            }
 
-            new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
-            new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
-
-            # Construct the new prediction by keeping only the nms_keep_indices and padding with 0s otherwise.
-            for frame_index in range(len(self.all_frame_indexes)):
-                for box_index in range(NUM_QUERIES):
-                    if box_index in nms_keep_indices[frame_index]:
-                        new_all_box_predictions[frame_index][box_index] = torch.tensor(self.all_box_predictions[frame_index][box_index])
-                        new_all_class_predictions[frame_index][box_index] = torch.tensor(self.all_class_predictions[frame_index][box_index])
-
-            sorted_new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
-            sorted_new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
-
-            # Sort boxes by confidence.
-            sorted_indexes = torch.argsort(new_all_class_predictions[:, :, -1], descending=True)
-
-            for frame_index in range(len(self.all_frame_indexes)):
-                for box_index in range(NUM_QUERIES):
-                    sorted_new_all_box_predictions[frame_index][box_index] = new_all_box_predictions[frame_index][sorted_indexes[frame_index][box_index]]
-                    sorted_new_all_class_predictions[frame_index][box_index] = new_all_class_predictions[frame_index][sorted_indexes[frame_index][box_index]]
-
-            sorted_new_all_box_predictions.reshape((len(self.dataset), NUM_QUERIES * 4))
-            sorted_new_all_class_predictions.reshape((len(self.dataset), NUM_QUERIES * (NUM_CLASSES + 1)))
-
-            write_json_file(os.path.join(self.evaluation_out_dir, PREDICTIONS_JSON_FILENAME), {"frame_ids": [self.dataset.get_frame_id(frame_index) for frame_index in self.all_frame_indexes], "frame_indexes": self.all_frame_indexes, "box_predictions": sorted_new_all_box_predictions.tolist(), "class_predictions": sorted_new_all_class_predictions.tolist()}, indent=None)
-
-            if options["inference_split"] == "VALID":
-                calculate_metrics(self.dataset, self.evaluation_out_dir)
-
-            save_images_with_bounding_boxes(self.dataset, self.evaluation_out_dir, NUM_SAVED_IMAGES,
-                                            LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
-                                            test=(options["inference_split"] == "TEST"))
+            write_json_file(os.path.join(self.evaluation_out_dir, PREDICTIONS_JSON_FILENAME), predictions, indent=None)
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
@@ -344,8 +309,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
 class LoadPredictionsModel:
     def __init__(self, predictions_path, dataset):
-        self.predictions_path = predictions_path
-        self.predictions = load_json_file(self.predictions_path)
+        self.predictions = load_json_file(predictions_path)
         self.dataset = dataset
 
     def load_predictions(self, frame_ids):

@@ -37,7 +37,8 @@
       "Label(FrameID, BoundingBoxID, +Class) >= 1 . {Class: Action(Class)}",
 
       "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}",
-      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}"
+      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}",
+      "Label(FrameID, BoundingBoxID1, '8') & Label(FrameID, BoundingBoxID2, '8') & Label(FrameID, BoundingBoxID1, Class) -> Label(FrameID, BoundingBoxID2, Class) ."
     ]
   },
   "predicates": {
