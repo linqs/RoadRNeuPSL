@@ -156,9 +156,6 @@ def _load_args():
     parser.add_argument("--batch-size", dest="batch_size",
                         action="store", type=int, default=4,
                         help="Batch size.")
-    parser.add_argument("--saved-model-path", dest="saved_model_path",
-                        action="store", type=str, default=None,
-                        help="Path to model parameters to load.")
     parser.add_argument("--output-dir", dest="output_dir",
                         action="store", type=str, default=None,
                         help="Directory to save results to.")
@@ -175,9 +172,6 @@ def _load_args():
     arguments = parser.parse_args()
 
     arguments.test_evaluation = arguments.eval_videos.upper() == "TEST"
-
-    if arguments.saved_model_path is None:
-        arguments.saved_model_path = os.path.join(BASE_RESULTS_DIR, arguments.task, NEURAL_TRAINED_MODEL_DIR, NEURAL_TRAINED_MODEL_FILENAME)
 
     if arguments.output_dir is None:
         if arguments.test_evaluation:

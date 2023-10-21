@@ -199,11 +199,12 @@ def match_box(pred_box, truth_boxes, skip_box_indexes, iou_threshold):
     return max_truth_box_index
 
 
-def precision_recall_f1(dataset, frame_ids, class_predictions, box_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
+def precision_recall_f1(dataset, frame_ids, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
     """
     Computes the precision, recall and f1 score for a given set of predictions.
     :param dataset: Dataset for which the predictions were computed.
     :param frame_ids: List of frame ids (video name, frame name).
+    :param box_predictions: List containing the predictions.
     :param class_predictions: List containing the predictions.
     :param iou_threshold: Threshold for the IoU.
     :param label_confidence_threshold: Threshold for the label confidence score.
@@ -299,7 +300,7 @@ def count_violated_constraints(constraints, dataset, frame_ids, class_prediction
             if class_predictions[frame_index][pred_box_index][-1] < box_confidence_threshold:
                 break
 
-            detected_label = [1 if class_predictions[frame_index][pred_box_index][label] > label_confidence_threshold else 0 for label in range(NUM_CLASSES)]
+            detected_label = [label for label in range(NUM_CLASSES) if class_predictions[frame_index][pred_box_index][label] > label_confidence_threshold]
 
             has_agent = False
             has_location = False

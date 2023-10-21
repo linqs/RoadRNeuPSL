@@ -23,10 +23,7 @@ HARD_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occu
 SOFT_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "soft-co-occurrence.csv")
 
 PREDICTIONS_JSON_FILENAME = "predictions.json"
-PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME = "prediction_probabilities_with_confidence.json"
-PREDICTION_PROBABILITIES_PKL_FILENAME = "prediction_probabilities.pkl"
-PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
-PREDICTION_LABELS_PKL_FILENAME = "prediction_labels.pkl"
+SUBMISSION_PREDICTIONS_PKL_FILENAME = "submission_predictions.pkl"
 EVALUATION_METRICS_FILENAME = "evaluation_metrics.json"
 NEURAL_TRAINED_MODEL_DIR = "trained_model"
 NEURAL_TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"

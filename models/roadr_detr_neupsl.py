@@ -19,7 +19,6 @@ from models.losses import detr_loss
 from utils import box_cxcywh_to_xyxy
 from utils import get_torch_device
 from utils import load_json_file
-from utils import pixel_to_ratio_coordinates
 from utils import save_model_state
 from utils import seed_everything
 from utils import write_json_file
@@ -174,19 +173,21 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             for frame_index in frame_indexes:
                 frame_ids.append(self.dataset.get_frame_id(frame_index))
             self.batch_predictions = self.model.load_predictions(frame_ids)
-            self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["pred_boxes"].shape, device=get_torch_device())
-            for i in range(len(self.batch_predictions["pred_boxes"])):
-                self.formatted_batch_box_predictions[i] += self.batch_predictions["pred_boxes"][i]
+            self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["box_predictions"].shape, device=get_torch_device())
+            for i in range(len(self.batch_predictions["box_predictions"])):
+                self.formatted_batch_box_predictions[i] += self.batch_predictions["box_predictions"][i]
         else:
             self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
             self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["pred_boxes"].shape, device=get_torch_device())
             for i in range(len(self.batch_predictions["pred_boxes"])):
                 self.formatted_batch_box_predictions[i] += box_cxcywh_to_xyxy(self.batch_predictions["pred_boxes"][i])
 
+            self.batch_predictions["class_predictions"] = torch.sigmoid(self.batch_predictions["logits"])
+
         if (self.application == "inference") and (not self._train):
             self.all_frame_indexes.extend(frame_indexes.cpu().tolist())
 
-        return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.formatted_batch_box_predictions.detach().cpu(), options=options), {}
+        return self.format_batch_predictions(self.batch_predictions["class_predictions"].detach().cpu(), self.formatted_batch_box_predictions.detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
         if self.application == "learning":
@@ -213,7 +214,6 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
             predictions = {
                 "frame_ids": [self.dataset.get_frame_id(frame_index) for frame_index in range(len(self.all_frame_indexes))],
-                "frame_indexes": self.all_frame_indexes,
                 "box_predictions": np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)).tolist(),
                 "class_predictions": np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1)).tolist(),
             }
@@ -258,17 +258,16 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         return formatted_gradients.to(get_torch_device())
 
-    def format_batch_predictions(self, logits, boxes, options={}):
+    def format_batch_predictions(self, class_predictions, box_predictions, options={}):
         self.batch_predictions_formatted = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
-        batch_predictions_sorted_indexes = torch.argsort(logits[:, :, -1], descending=True)
+        batch_predictions_sorted_indexes = torch.argsort(class_predictions[:, :, -1], descending=True)
 
-        batch_prediction_probabilities = torch.sigmoid(logits)
-        batch_predictions = torch.cat((batch_prediction_probabilities, boxes), dim=-1)
+        batch_predictions = torch.cat((class_predictions, box_predictions), dim=-1)
 
-        for batch_index in range(len(batch_prediction_probabilities)):
+        for batch_index in range(len(class_predictions)):
             for box_index in range(NUM_NEUPSL_QUERIES):
-                if (self.application == "inference") and (batch_prediction_probabilities[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
+                if (self.application == "inference") and (class_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
                     continue
 
                 self.batch_predictions_formatted[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
@@ -309,27 +308,19 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
 class LoadPredictionsModel:
     def __init__(self, predictions_path, dataset):
-        self.predictions = load_json_file(predictions_path)
         self.dataset = dataset
+        self.predictions = load_json_file(predictions_path)
+
+        self.frame_ids = self.predictions["frame_ids"]
+        self.box_predictions = torch.tensor(self.predictions["box_predictions"])
+        self.class_predictions = torch.tensor(self.predictions["class_predictions"])
 
     def load_predictions(self, frame_ids):
-        frame_predictions = {"logits": [], "pred_boxes": []}
-        for batch_frame_index in range(len(frame_ids)):
-            frame_id = frame_ids[batch_frame_index]
-            frame_predictions["logits"].append([])
-            frame_predictions["pred_boxes"].append([])
-            for box in range(len(self.predictions[frame_id[0]][frame_id[1]])):
-                frame_predictions["logits"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["labels"])
-                frame_predictions["pred_boxes"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["bbox"])
+        frame_predictions = {}
+        frame_indexes = [self.dataset.get_frame_index(frame_id) for frame_id in frame_ids]
 
-            frame_predictions["pred_boxes"][batch_frame_index] = pixel_to_ratio_coordinates(
-                torch.tensor(frame_predictions["pred_boxes"][batch_frame_index], dtype=torch.float32),
-                self.dataset.image_height() / self.dataset.image_resize,
-                self.dataset.image_width() / self.dataset.image_resize).tolist()
-
-        frame_predictions["logits"] = torch.torch.tensor(frame_predictions["logits"], dtype=torch.float32, device=get_torch_device())
-        frame_predictions["logits"] = torch.log(frame_predictions["logits"] / (1 - frame_predictions["logits"]))
-        frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32, device=get_torch_device())
+        frame_predictions["box_predictions"] = self.box_predictions[frame_indexes].to(get_torch_device())
+        frame_predictions["class_predictions"] = self.class_predictions[frame_indexes].to(get_torch_device())
 
         return frame_predictions
 
