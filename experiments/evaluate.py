@@ -10,11 +10,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 
 from data.roadr_dataset import RoadRDataset
-from models.evaluation import save_images_with_bounding_boxes, agent_nms
+from models.evaluation import agent_nms_mask
 from models.evaluation import count_violated_constraints
-from models.evaluation import filter_map_pred_and_truth
 from models.evaluation import mean_average_precision
 from models.evaluation import precision_recall_f1
+from models.evaluation import save_images_with_bounding_boxes
+from models.evaluation import sort_detections_in_frames
 from utils import load_constraint_file
 from utils import load_json_file
 from utils import seed_everything
@@ -29,8 +30,6 @@ from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
-from utils import NUM_CLASSES
-from utils import NUM_QUERIES
 from utils import NUM_SAVED_IMAGES
 from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
@@ -38,37 +37,20 @@ from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
 
 
-def filter_predictions(dataset, predictions, arguments):
+def filter_predictions(dataset, predictions):
     logging.info("Filtering predictions.")
-    nms_keep_indices = agent_nms(
-        np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)),
-        np.array(self.all_class_predictions)[:, :, -1].reshape((len(self.dataset), NUM_QUERIES)),
-        np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1))[:, :, :-1],
-    )
+    mask_keep_detections = agent_nms_mask(dataset,
+                                          predictions["frame_ids"],
+                                          torch.Tensor(predictions["box_predictions"]),
+                                          torch.Tensor(predictions["class_predictions"]),
+                                          IOU_THRESHOLD, 0.5, 0.5)
 
-    new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
-    new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
+    for frame_index in range(len(predictions["class_predictions"])):
+        for box_index in range(len(predictions["class_predictions"][frame_index])):
+            predictions["class_predictions"][frame_index][box_index][-1] *= mask_keep_detections[frame_index][box_index]
 
-    # Construct the new prediction by keeping only the nms_keep_indices and padding with 0s otherwise.
-    for frame_index in range(len(self.all_frame_indexes)):
-        for box_index in range(NUM_QUERIES):
-            if box_index in nms_keep_indices[frame_index]:
-                new_all_box_predictions[frame_index][box_index] = torch.tensor(self.all_box_predictions[frame_index][box_index])
-                new_all_class_predictions[frame_index][box_index] = torch.tensor(self.all_class_predictions[frame_index][box_index])
+    predictions["box_predictions"], predictions["class_predictions"] = sort_detections_in_frames(predictions["class_predictions"], predictions["box_predictions"])
 
-    sorted_new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
-    sorted_new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
-
-    # Sort boxes by confidence.
-    sorted_indexes = torch.argsort(new_all_class_predictions[:, :, -1], descending=True)
-
-    for frame_index in range(len(self.all_frame_indexes)):
-        for box_index in range(NUM_QUERIES):
-            sorted_new_all_box_predictions[frame_index][box_index] = new_all_box_predictions[frame_index][sorted_indexes[frame_index][box_index]]
-            sorted_new_all_class_predictions[frame_index][box_index] = new_all_class_predictions[frame_index][sorted_indexes[frame_index][box_index]]
-
-    sorted_new_all_box_predictions.reshape((len(self.dataset), NUM_QUERIES * 4))
-    sorted_new_all_class_predictions.reshape((len(self.dataset), NUM_QUERIES * (NUM_CLASSES + 1)))
     return predictions
 
 
@@ -76,17 +58,16 @@ def calculate_metrics(dataset, predictions, output_dir):
     logging.info("Calculating metrics.")
 
     logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
-    filtered_pred, filtered_truth = filter_map_pred_and_truth(dataset,
-                                                              predictions["frame_indexes"],
-                                                              torch.Tensor(predictions["box_predictions"]),
-                                                              torch.Tensor(predictions["class_predictions"]),
-                                                              IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
-    mean_avg_prec = mean_average_precision(filtered_pred, filtered_truth, IOU_THRESHOLD)
+    mean_avg_prec = mean_average_precision(dataset,
+                                           predictions["frame_ids"],
+                                           torch.Tensor(predictions["box_predictions"]),
+                                           torch.Tensor(predictions["class_predictions"]),
+                                           IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
     logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
     precision, recall, f1 = precision_recall_f1(dataset,
-                                                predictions["frame_indexes"],
+                                                predictions["frame_ids"],
                                                 predictions["box_predictions"],
                                                 predictions["class_predictions"],
                                                 IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
@@ -96,7 +77,8 @@ def calculate_metrics(dataset, predictions, output_dir):
 
     logging.info("Counting constraint violations.")
     violations = count_violated_constraints(load_constraint_file(HARD_CONSTRAINTS_PATH),
-                                            predictions["frame_indexes"],
+                                            dataset,
+                                            predictions["frame_ids"],
                                             predictions["class_predictions"],
                                             LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
     logging.info("Constraint violations: {}".format(violations[0]))
@@ -136,14 +118,18 @@ def main(arguments):
     predictions = load_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME))
 
     if arguments.filter_predictions:
-        predictions = filter_predictions(dataset, predictions, arguments)
+        predictions = filter_predictions(dataset, predictions)
 
     if not arguments.test_evaluation:
         calculate_metrics(dataset, predictions, arguments.output_dir)
 
     logging.info("Saving images with bounding boxes.")
-    save_images_with_bounding_boxes(dataset, arguments.output_dir, arguments.max_saved_images,
+    save_images_with_bounding_boxes(arguments.output_dir, dataset,
+                                    predictions["frame_ids"],
+                                    predictions["box_predictions"],
+                                    predictions["class_predictions"],
                                     LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
+                                    max_saved_images=arguments.max_saved_images,
                                     test=arguments.test_evaluation)
 
 

@@ -12,7 +12,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 
 from data.roadr_dataset import RoadRDataset
-from experiments.pretrain import build_model
+from experiments.pretrain_neural import build_model
+from models.evaluation import sort_detections_in_frames
 from models.trainer import Trainer
 from utils import get_torch_device
 from utils import seed_everything
@@ -22,30 +23,10 @@ from utils import NEURAL_TEST_INFERENCE_DIR
 from utils import NEURAL_TRAINED_MODEL_DIR
 from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
-from utils import NUM_SAVED_IMAGES
 from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
-
-
-def sort_detections_in_frames(pred_labels, pred_boxes):
-    """
-    Sorts the detections in each frame by their confidence score.
-    :param pred_labels: List of lists of predicted labels.
-    :param pred_boxes: List of lists of predicted boxes.
-    :return: Sorted lists of predicted labels and boxes.
-    """
-    sorted_boxes = []
-    sorted_labels = []
-
-    for frame_pred_labels, frame_pred_boxes in zip(pred_labels, pred_boxes):
-        frame_pred_labels, frame_pred_boxes = zip(*sorted(zip(frame_pred_labels, frame_pred_boxes), key=lambda x: x[0][-1], reverse=True))
-
-        sorted_boxes.append(frame_pred_boxes)
-        sorted_labels.append(frame_pred_labels)
-
-    return sorted_boxes, sorted_labels
 
 
 def save_predictions(predictions, dataset, arguments):
@@ -62,7 +43,7 @@ def save_predictions(predictions, dataset, arguments):
     class_predictions = torch.sigmoid(torch.tensor(sorted_logits)).tolist()
     frame_ids = [dataset.get_frame_id(frame_index) for frame_index in frame_indexes]
 
-    write_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME), {"frame_ids": frame_ids, "frame_indexes": frame_indexes, "box_predictions": sorted_boxes, "class_predictions": class_predictions}, indent=None)
+    write_json_file(os.path.join(arguments.output_dir, PREDICTIONS_JSON_FILENAME), {"frame_ids": frame_ids, "box_predictions": sorted_boxes, "class_predictions": class_predictions}, indent=None)
 
 
 def predict_dataset(dataset, arguments):
@@ -104,8 +85,9 @@ def main(arguments):
     logging.info("Predicting dataset.")
     predictions = predict_dataset(dataset, arguments)
 
-    logging.info("Saving predictions.")
-    save_predictions(predictions, dataset, arguments)
+    if predictions is not None:
+        logging.info("Saving predictions.")
+        save_predictions(predictions, dataset, arguments)
 
 
 def _load_args():
@@ -137,12 +119,6 @@ def _load_args():
     parser.add_argument("--output-dir", dest="output_dir",
                         action="store", type=str, default=None,
                         help="Directory to save results to.")
-    parser.add_argument("--save-images", dest="save_images",
-                        action="store", type=str, default="BOXES_AND_LABELS",
-                        help="Save images with bounding boxes.", choices=["NONE", "BOXES", "BOXES_AND_LABELS"])
-    parser.add_argument("--max-saved-images", dest="max_saved_images",
-                        action="store", type=int, default=NUM_SAVED_IMAGES,
-                        help="Maximum number of images saved per video.")
 
     arguments = parser.parse_args()
 

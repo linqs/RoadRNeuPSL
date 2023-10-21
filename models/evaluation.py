@@ -27,130 +27,73 @@ FONT_SIZE = 7
 GROUND_TRUTH_BORDER_COLOR = (1, 0, 0)
 
 
-def save_frame_with_bounding_boxes(load_path, save_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=False, write_ground_truth=True, write_detected=True):
+def sort_detections_in_frames(pred_labels, pred_boxes):
     """
-    Saves the given frame with the given bounding boxes.
-    :param load_path: Path from which the frame should be loaded.
-    :param save_path: Path to which the frame should be saved.
-    :param ground_truth_boxes: List of ground truth bounding boxes.
-    :param detected_boxes: List of detected bounding boxes.
+    Sorts the detections in each frame by their confidence score.
+    :param pred_labels: List of lists of predicted labels.
+    :param pred_boxes: List of lists of predicted boxes.
+    :return: Sorted lists of predicted labels and boxes.
     """
-    frame = torchvision.io.read_image(load_path)
+    sorted_boxes = []
+    sorted_labels = []
 
-    fig, ax = plt.subplots()
-    ax.imshow(frame.permute(1, 2, 0))
+    for frame_pred_labels, frame_pred_boxes in zip(pred_labels, pred_boxes):
+        frame_pred_labels, frame_pred_boxes = zip(*sorted(zip(frame_pred_labels, frame_pred_boxes), key=lambda x: x[0][-1], reverse=True))
 
-    if write_ground_truth:
-        for ground_truth_box, ground_truth_label in zip(ground_truth_boxes, ground_truth_labels):
-            rectangle = plt.Rectangle((ground_truth_box[0], ground_truth_box[1]), ground_truth_box[2] - ground_truth_box[0], ground_truth_box[3] - ground_truth_box[1], linewidth=BORDER_LINEWIDTH, edgecolor=GROUND_TRUTH_BORDER_COLOR, facecolor="none")
-            ax.add_patch(rectangle)
+        sorted_boxes.append(frame_pred_boxes)
+        sorted_labels.append(frame_pred_labels)
 
-            if write_labels:
-                text = [LABEL_MAPPING[index] for index in range(len(ground_truth_label[:-1])) if ground_truth_label[index] == 1]
-                ax.text(ground_truth_box[0], ground_truth_box[3], "\n".join(text), fontsize=FONT_SIZE, color=FONT_COLOR, bbox=FONT_BOUNDING_BOX)
-
-    if write_detected:
-        for detected_box, detected_label in zip(detected_boxes, detected_labels):
-            rectangle = plt.Rectangle((detected_box[0], detected_box[1]), detected_box[2] - detected_box[0], detected_box[3] - detected_box[1], linewidth=BORDER_LINEWIDTH, edgecolor=DETECTED_BORDER_COLOR, facecolor="none")
-            ax.add_patch(rectangle)
-
-            if write_labels:
-                text = [LABEL_MAPPING[index] for index in range(len(detected_label)) if detected_label[index] == 1]
-                ax.text(detected_box[0], detected_box[3], "\n".join(text), fontsize=FONT_SIZE, color=FONT_COLOR, bbox=FONT_BOUNDING_BOX)
-
-    plt.savefig(save_path)
-    plt.close()
+    return sorted_boxes, sorted_labels
 
 
-def save_images_with_bounding_boxes(dataset, predictions, output_dir, max_saved_images, labels_confidence_threshold, box_confidence_threshold, test=False):
-    """
-    Saves images with bounding boxes for the given dataset.
-    :param dataset: Dataset for which the images should be saved.
-    :param predictions: Dictionary of predictions containing frame indexes, boxes, and logits.
-    :param output_dir: Directory to which the images should be saved.
-    :param max_saved_images: Maximum number of images to save.
-    :param labels_confidence_threshold: Label confidence used to output labels on images with labels.
-    :param box_confidence_threshold: Label confidence used to output labels on images with labels.
-    :param test: Whether the dataset is a test dataset.
-    """
-
-    saved_image_dict = {}
-
-    for frame_index, frame_id in zip(predictions["frame_indexes"], predictions["frame_ids"]):
-        if frame_id[0] not in saved_image_dict:
-            saved_image_dict[frame_id[0]] = 0
-            os.makedirs(os.path.join(output_dir, "rgb-images", frame_id[0]), exist_ok=True)
-
-        if saved_image_dict[frame_id[0]] >= max_saved_images:
-            continue
-
-        frame_ids, pixel_values, pixel_mask, ground_truth_labels, ground_truth_boxes = dataset[frame_index]
-
-        load_frame_path = os.path.join(BASE_TEST_RGB_IMAGES_DIR, frame_id[0], frame_id[1])
-
-        if not test:
-            load_frame_path = os.path.join(BASE_RGB_IMAGES_DIR, frame_id[0], frame_id[1])
-            ground_truth_boxes = ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
-
-        detected_boxes = torch.Tensor([box_prediction for box_prediction, class_prediction in zip(predictions["box_predictions"][frame_index], predictions["class_predictions"][frame_index]) if class_prediction[-1] > box_confidence_threshold])
-        detected_labels = torch.Tensor([class_prediction[:-1] for class_prediction in predictions["class_predictions"][frame_index] if class_prediction[-1] > box_confidence_threshold])
-        detected_labels = detected_labels.gt(labels_confidence_threshold).float()
-
-        save_frame_path = os.path.join(output_dir, "rgb-images", frame_id[0], frame_id[1][:-4] + "_boxes.jpg")
-        save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=False, write_ground_truth=(not test), write_detected=True)
-
-        if not test:
-            save_frame_path = os.path.join(output_dir, "rgb-images", frame_id[0], frame_id[1][:-4] + "_ground_truth.jpg")
-            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=True, write_ground_truth=True, write_detected=False)
-
-        save_frame_path = os.path.join(output_dir, "rgb-images", frame_id[0], frame_id[1][:-4] + "_detected.jpg")
-        save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=True, write_ground_truth=False, write_detected=True)
-
-        saved_image_dict[frame_id[0]] += 1
-
-
-def agent_nms(box_predictions, box_confidence_scores, class_predictions, iou_threshold=0.6, label_threshold=0.5):
+def agent_nms_mask(dataset, frame_ids, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
     """
     Applies non-maximum suppression to the detections using the agent class.
+    :param dataset: Dataset for which the detections were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
     :param box_predictions: The predicted bounding boxes.
-    :param box_confidence_scores: The confidence scores for the predicted bounding boxes.
     :param class_predictions: The predicted class labels in one-hot encoding.
     :param iou_threshold: Threshold for the IoU.
-    :param label_threshold: Threshold for the label confidence score.
-    :return: Indices of the detections that should be kept.
+    :param label_confidence_threshold: Threshold for the label confidence score.
+    :param box_confidence_threshold: Threshold for the box confidence score.
+    :return: Integer mask of the kept detections.
     """
-    kept_element_indexes = []
-    for frame_index in range(box_predictions.shape[0]):
-        frame_boxes = box_predictions[frame_index]
-        frame_scores = box_confidence_scores[frame_index]
+    mask_keep_detections = []
+    for frame_id in frame_ids:
+        frame_index = dataset.get_frame_index(frame_id)
 
-        kept_element_indexes.append(set())
+        mask_keep_detections.append([0] * len(box_predictions[frame_index]))
+
+        frame_pred_labels, frame_pred_boxes = class_predictions[frame_index], box_predictions[frame_index]
+
+        mask_frame_pred = frame_pred_labels[:, -1].gt(box_confidence_threshold)
+
+        frame_pred_labels, frame_pred_boxes = frame_pred_labels[mask_frame_pred], frame_pred_boxes[mask_frame_pred]
 
         for class_index in AGENT_CLASSES:
-            class_scores = class_predictions[frame_index, :, class_index]
+            class_pred_labels = frame_pred_labels[:, class_index]
 
-            class_frames_mask = class_scores > label_threshold
+            mask_class_pred = class_pred_labels.gt(label_confidence_threshold)
 
-            masked_frame_boxes = frame_boxes[class_frames_mask]
-            masked_frame_scores = frame_scores[class_frames_mask]
+            class_pred_labels, class_pred_boxes = class_pred_labels[mask_class_pred], frame_pred_boxes[mask_class_pred]
 
-            nms_kept_indices = nms(boxes=torch.tensor(masked_frame_boxes), scores=torch.tensor(masked_frame_scores), iou_threshold=iou_threshold)
-            nms_kept_indices = nms_kept_indices.numpy()
-            nms_kept_indices = np.arange(len(frame_boxes))[class_frames_mask][nms_kept_indices]
+            nms_keep_indexes = nms(boxes=class_pred_boxes, scores=class_pred_labels, iou_threshold=iou_threshold)
 
-            for index in nms_kept_indices:
-                kept_element_indexes[-1].add(index)
+            kept_indices = np.arange(len(box_predictions[frame_index]))[mask_frame_pred][mask_class_pred][nms_keep_indexes].tolist()
+            kept_indices = [kept_indices] if isinstance(kept_indices, int) else kept_indices
+            for index in kept_indices:
+                if mask_keep_detections[-1][index] == 0:
+                    mask_keep_detections[-1][index] = 1
 
-        kept_element_indexes[-1] = list(kept_element_indexes[-1])
-
-    return kept_element_indexes
+    return mask_keep_detections
 
 
-def filter_map_pred_and_truth(dataset, frame_indexes, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
+def filter_map_pred_and_truth(dataset, frame_ids, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
     """
     Filters predictions using non-maximum suppression and returns the predictions and truth in the format
     required for the mean average precision metric.
     :param dataset: Dataset for which the detections were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
     :param box_predictions: Tensor of shape (N, 4) containing the predicted bounding boxes.
     :param class_predictions: Tensor of shape (N, C) containing the predicted class probabilities.
     :param iou_threshold: Threshold for the IoU.
@@ -161,7 +104,9 @@ def filter_map_pred_and_truth(dataset, frame_indexes, box_predictions, class_pre
     filtered_pred = []
     filtered_truth = []
 
-    for frame_index in frame_indexes:
+    for frame_id in frame_ids:
+        frame_index = dataset.get_frame_index(frame_id)
+
         frame_pred_labels, frame_pred_boxes = class_predictions[frame_index], box_predictions[frame_index]
         frame_truth_labels, frame_truth_boxes = dataset.get_labels_and_boxes(frame_index)
 
@@ -204,13 +149,20 @@ def filter_map_pred_and_truth(dataset, frame_indexes, box_predictions, class_pre
     return filtered_pred, filtered_truth
 
 
-def mean_average_precision(pred, truth, iou_threshold=0.5):
+def mean_average_precision(dataset, frame_ids, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
     """
     Computes the mean average precision (mAP) for a given set of predictions and truth.
-    :param truth: List of dictionaries containing the ground truths.
-    :param pred: List of dictionaries containing the predictions.
+    :param dataset: Dataset for which the detections were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
+    :param box_predictions: Tensor of shape (N, 4) containing the predicted bounding boxes.
+    :param class_predictions: Tensor of shape (N, C) containing the predicted class probabilities.
+    :param iou_threshold: Threshold for the IoU.
+    :param label_confidence_threshold: Threshold for the label confidence score.
+    :param box_confidence_threshold: Threshold for the box confidence score.
     :param iou_threshold: Threshold for the IoU.
     """
+    pred, truth = filter_map_pred_and_truth(dataset, frame_ids, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold)
+
     map_metric = MeanAveragePrecision(iou_thresholds=[iou_threshold], iou_type="bbox", box_format="xyxy")
 
     map_metric.update(pred, truth)
@@ -238,7 +190,6 @@ def match_box(pred_box, truth_boxes, skip_box_indexes, iou_threshold):
         if truth_box.sum() < EPSILON:
             break
 
-        # print(truth_box, pred_box)
         box_iou = single_box_iou(truth_box, pred_box)
         if box_iou > iou_threshold:
             if box_iou > max_box_iou:
@@ -248,11 +199,11 @@ def match_box(pred_box, truth_boxes, skip_box_indexes, iou_threshold):
     return max_truth_box_index
 
 
-def precision_recall_f1(dataset, frame_indexes, class_predictions, box_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
+def precision_recall_f1(dataset, frame_ids, class_predictions, box_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
     """
     Computes the precision, recall and f1 score for a given set of predictions.
     :param dataset: Dataset for which the predictions were computed.
-    :param frame_indexes: List of frame indexes for which the predictions were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
     :param class_predictions: List containing the predictions.
     :param iou_threshold: Threshold for the IoU.
     :param label_confidence_threshold: Threshold for the label confidence score.
@@ -263,7 +214,9 @@ def precision_recall_f1(dataset, frame_indexes, class_predictions, box_predictio
     fp = 0
     fn = 0
 
-    for frame_index in frame_indexes:
+    for frame_id in frame_ids:
+        frame_index = dataset.get_frame_index(frame_id)
+
         truth_labels, truth_boxes = dataset.get_labels_and_boxes(frame_index)
 
         matched_box_indexes = set()
@@ -316,11 +269,12 @@ def precision_recall_f1(dataset, frame_indexes, class_predictions, box_predictio
     return precision, recall, f1_score
 
 
-def count_violated_constraints(constraints, frame_indexes, class_predictions, label_confidence_threshold, box_confidence_threshold):
+def count_violated_constraints(constraints, dataset, frame_ids, class_predictions, label_confidence_threshold, box_confidence_threshold):
     """
     Counts the number of violated pairwise constraints.
     :param constraints: List of pairwise constraints.
-    :param frame_indexes: List of frame indexes for which the predictions were computed.
+    :param dataset: Dataset for which the predictions were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
     :param class_predictions: List containing the predictions.
     :param label_confidence_threshold: Threshold for the label confidence score.
     :param box_confidence_threshold: Threshold for the box confidence score.
@@ -336,7 +290,9 @@ def count_violated_constraints(constraints, frame_indexes, class_predictions, la
         }
     }
 
-    for frame_index in frame_indexes:
+    for frame_id in frame_ids:
+        frame_index = dataset.get_frame_index(frame_id)
+
         frame_violation = False
 
         for pred_box_index in range(len(class_predictions[frame_index]) - 1):
@@ -382,3 +338,87 @@ def count_violated_constraints(constraints, frame_indexes, class_predictions, la
             num_frames_with_violation += 1
 
     return num_constraint_violations, num_frames_with_violation, constraint_violation_dict
+
+
+def save_frame_with_bounding_boxes(load_path, save_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=False, write_ground_truth=True, write_detected=True):
+    """
+    Saves the given frame with the given bounding boxes.
+    :param load_path: Path from which the frame should be loaded.
+    :param save_path: Path to which the frame should be saved.
+    :param ground_truth_boxes: List of ground truth bounding boxes.
+    :param detected_boxes: List of detected bounding boxes.
+    """
+    frame = torchvision.io.read_image(load_path)
+
+    fig, ax = plt.subplots()
+    ax.imshow(frame.permute(1, 2, 0))
+
+    if write_ground_truth:
+        for ground_truth_box, ground_truth_label in zip(ground_truth_boxes, ground_truth_labels):
+            rectangle = plt.Rectangle((ground_truth_box[0], ground_truth_box[1]), ground_truth_box[2] - ground_truth_box[0], ground_truth_box[3] - ground_truth_box[1], linewidth=BORDER_LINEWIDTH, edgecolor=GROUND_TRUTH_BORDER_COLOR, facecolor="none")
+            ax.add_patch(rectangle)
+
+            if write_labels:
+                text = [LABEL_MAPPING[index] for index in range(len(ground_truth_label[:-1])) if ground_truth_label[index] == 1]
+                ax.text(ground_truth_box[0], ground_truth_box[3], "\n".join(text), fontsize=FONT_SIZE, color=FONT_COLOR, bbox=FONT_BOUNDING_BOX)
+
+    if write_detected:
+        for detected_box, detected_label in zip(detected_boxes, detected_labels):
+            rectangle = plt.Rectangle((detected_box[0], detected_box[1]), detected_box[2] - detected_box[0], detected_box[3] - detected_box[1], linewidth=BORDER_LINEWIDTH, edgecolor=DETECTED_BORDER_COLOR, facecolor="none")
+            ax.add_patch(rectangle)
+
+            if write_labels:
+                text = [LABEL_MAPPING[index] for index in range(len(detected_label)) if detected_label[index] == 1]
+                ax.text(detected_box[0], detected_box[3], "\n".join(text), fontsize=FONT_SIZE, color=FONT_COLOR, bbox=FONT_BOUNDING_BOX)
+
+    plt.savefig(save_path)
+    plt.close()
+
+
+def save_images_with_bounding_boxes(output_dir, dataset, frame_ids, class_predictions, box_predictions, labels_confidence_threshold, box_confidence_threshold, max_saved_images=10, test=False):
+    """
+    Saves images with bounding boxes for the given dataset.
+    :param dataset: Dataset for which the predictions were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
+    :param class_predictions: List containing the predictions.
+    :param output_dir: Directory to which the images should be saved.
+    :param max_saved_images: Maximum number of images to save.
+    :param labels_confidence_threshold: Label confidence used to output labels on images with labels.
+    :param box_confidence_threshold: Label confidence used to output labels on images with labels.
+    :param test: Whether the dataset is a test dataset.
+    """
+
+    saved_image_dict = {}
+
+    for frame_id in frame_ids:
+        if frame_id[0] not in saved_image_dict:
+            saved_image_dict[frame_id[0]] = 0
+            os.makedirs(os.path.join(output_dir, "rgb-images", frame_id[0]), exist_ok=True)
+
+        if saved_image_dict[frame_id[0]] >= max_saved_images:
+            continue
+
+        frame_index = dataset.get_frame_index(frame_id)
+        ground_truth_labels, ground_truth_boxes = dataset.get_labels_and_boxes(frame_index)
+
+        load_frame_path = os.path.join(BASE_TEST_RGB_IMAGES_DIR, frame_id[0], frame_id[1])
+
+        if not test:
+            load_frame_path = os.path.join(BASE_RGB_IMAGES_DIR, frame_id[0], frame_id[1])
+            ground_truth_boxes = ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
+
+        detected_boxes = torch.Tensor([box_prediction for box_prediction, class_prediction in zip(box_predictions[frame_index], class_predictions[frame_index]) if class_prediction[-1] > box_confidence_threshold])
+        detected_labels = torch.Tensor([class_prediction[:-1] for class_prediction in class_predictions[frame_index] if class_prediction[-1] > box_confidence_threshold])
+        detected_labels = detected_labels.gt(labels_confidence_threshold).float()
+
+        save_frame_path = os.path.join(output_dir, "rgb-images", frame_id[0], frame_id[1][:-4] + "_boxes.jpg")
+        save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=False, write_ground_truth=(not test), write_detected=True)
+
+        if not test:
+            save_frame_path = os.path.join(output_dir, "rgb-images", frame_id[0], frame_id[1][:-4] + "_ground_truth.jpg")
+            save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=True, write_ground_truth=True, write_detected=False)
+
+        save_frame_path = os.path.join(output_dir, "rgb-images", frame_id[0], frame_id[1][:-4] + "_detected.jpg")
+        save_frame_with_bounding_boxes(load_frame_path, save_frame_path, ground_truth_boxes, detected_boxes, ground_truth_labels, detected_labels, write_labels=True, write_ground_truth=False, write_detected=True)
+
+        saved_image_dict[frame_id[0]] += 1
