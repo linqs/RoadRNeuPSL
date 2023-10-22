@@ -376,11 +376,12 @@ def save_frame_with_bounding_boxes(load_path, save_path, ground_truth_boxes, det
     plt.close()
 
 
-def save_images_with_bounding_boxes(output_dir, dataset, frame_ids, class_predictions, box_predictions, labels_confidence_threshold, box_confidence_threshold, max_saved_images=10, test=False):
+def save_images_with_bounding_boxes(output_dir, dataset, frame_ids, box_predictions, class_predictions, labels_confidence_threshold, box_confidence_threshold, max_saved_images=10, test=False):
     """
     Saves images with bounding boxes for the given dataset.
     :param dataset: Dataset for which the predictions were computed.
     :param frame_ids: List of frame ids (video name, frame name).
+    :param box_predictions: List containing the predictions.
     :param class_predictions: List containing the predictions.
     :param output_dir: Directory to which the images should be saved.
     :param max_saved_images: Maximum number of images to save.
@@ -409,6 +410,7 @@ def save_images_with_bounding_boxes(output_dir, dataset, frame_ids, class_predic
             ground_truth_boxes = ratio_to_pixel_coordinates(ground_truth_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
 
         detected_boxes = torch.Tensor([box_prediction for box_prediction, class_prediction in zip(box_predictions[frame_index], class_predictions[frame_index]) if class_prediction[-1] > box_confidence_threshold])
+        detected_boxes = ratio_to_pixel_coordinates(detected_boxes, dataset.image_height() / dataset.image_resize, dataset.image_width() / dataset.image_resize)
         detected_labels = torch.Tensor([class_prediction[:-1] for class_prediction in class_predictions[frame_index] if class_prediction[-1] > box_confidence_threshold])
         detected_labels = detected_labels.gt(labels_confidence_threshold).float()
 
