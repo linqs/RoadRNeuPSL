@@ -11,6 +11,7 @@ import utils
 from utils import load_constraint_file
 from utils import HARD_CONSTRAINTS_PATH
 from utils import SOFT_CONSTRAINTS_PATH
+from utils import UNCOMMON_CONSTRAINTS_PATH
 from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 
@@ -59,6 +60,7 @@ def generate_experiment(experiment_dir, tube_size):
 
     hard_co_occurrence = load_constraint_file(HARD_CONSTRAINTS_PATH)
     soft_co_occurrence = load_constraint_file(SOFT_CONSTRAINTS_PATH)
+    uncommon_co_occurrence = load_constraint_file(UNCOMMON_CONSTRAINTS_PATH)
 
     utils.write_psl_file(os.path.join(experiment_dir, "entity-data-map.txt"), entity_data_map)
     utils.write_psl_file(os.path.join(experiment_dir, "classes-agent.txt"), AGENT_CLASSES)
@@ -72,6 +74,7 @@ def generate_experiment(experiment_dir, tube_size):
     utils.write_psl_file(os.path.join(experiment_dir, "same-corner-targets.txt"), same_corner_targets)
     utils.write_psl_file(os.path.join(experiment_dir, "hard-co-occurrence.txt"), hard_co_occurrence)
     utils.write_psl_file(os.path.join(experiment_dir, "soft-co-occurrence.txt"), soft_co_occurrence)
+    utils.write_psl_file(os.path.join(experiment_dir, "uncommon-co-occurrence.txt"), uncommon_co_occurrence)
 
 
 def _load_args():

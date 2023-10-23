@@ -21,12 +21,10 @@ BASE_TEST_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "test-rgb-images")
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 HARD_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
 SOFT_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "soft-co-occurrence.csv")
+UNCOMMON_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "uncommon-co-occurrence.csv")
 
-PREDICTION_PROBABILITIES_JSON_FILENAME = "prediction_probabilities.json"
-PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME = "prediction_probabilities_with_confidence.json"
-PREDICTION_PROBABILITIES_PKL_FILENAME = "prediction_probabilities.pkl"
-PREDICTION_LABELS_JSON_FILENAME = "prediction_labels.json"
-PREDICTION_LABELS_PKL_FILENAME = "prediction_labels.pkl"
+PREDICTIONS_JSON_FILENAME = "predictions.json"
+SUBMISSION_PREDICTIONS_PKL_FILENAME = "submission_predictions.pkl"
 EVALUATION_METRICS_FILENAME = "evaluation_metrics.json"
 NEURAL_TRAINED_MODEL_DIR = "trained_model"
 NEURAL_TRAINED_MODEL_FILENAME = "trained_model_parameters.pt"

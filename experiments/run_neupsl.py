@@ -63,10 +63,10 @@ def run_neupsl(arguments):
     set_log_options(psl_json, arguments)
     set_neural_predicate_options(psl_json, arguments)
 
-    learning_out_dir = os.path.join(base_out_dir, "neupsl_learning")
-    os.makedirs(learning_out_dir, exist_ok=True)
-
     if not arguments.no_learning:
+        learning_out_dir = os.path.join(base_out_dir, "neupsl_learning")
+        os.makedirs(learning_out_dir, exist_ok=True)
+
         # Run NeuPSL training.
         set_runtime_task(psl_json, "true", "false")
 

@@ -109,7 +109,7 @@ class RoadRDataset(Dataset):
         return self.frame_ids[frame_index]
 
     def get_frame_index(self, frame_id):
-        return self.frame_indexes[frame_id]
+        return self.frame_indexes[(frame_id[0], frame_id[1])]
 
     def get_labels_and_boxes(self, frame_index):
         _, _, labels, boxes = self.load_frame(frame_index, load_image=False)

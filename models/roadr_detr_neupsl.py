@@ -14,22 +14,17 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import logger
 
 from data.roadr_dataset import RoadRDataset
-from experiments.evaluate import calculate_metrics
-from experiments.evaluate import save_probabilities_and_labels
-from experiments.pretrain import build_model
-from models.analysis import save_images_with_bounding_boxes
-from models.evaluation import agent_nms
+from experiments.pretrain_neural import build_model
 from models.losses import detr_loss
 from utils import box_cxcywh_to_xyxy
 from utils import get_torch_device
 from utils import load_json_file
-from utils import pixel_to_ratio_coordinates
 from utils import save_model_state
 from utils import seed_everything
+from utils import write_json_file
 from utils import BASE_CLI_DIR
 from utils import BASE_RESULTS_DIR
 from utils import BOX_CONFIDENCE_THRESHOLD
-from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NEUPSL_TEST_INFERENCE_DIR
 from utils import NEUPSL_TRAINED_MODEL_DIR
 from utils import NEUPSL_TRAINED_MODEL_FILENAME
@@ -41,8 +36,7 @@ from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_CLASSES
 from utils import NUM_NEUPSL_QUERIES
 from utils import NUM_QUERIES
-from utils import NUM_SAVED_IMAGES
-from utils import PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME
+from utils import PREDICTIONS_JSON_FILENAME
 from utils import SEED
 from utils import TRAIN_VALIDATION_DATA_PATH
 from utils import VIDEO_PARTITIONS
@@ -103,9 +97,9 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         if options["load-predictions"] == "true":
             assert self.application != "learning"
             if (options["inference_split"] == "VALID"):
-                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_VALID_INFERENCE_DIR, "evaluation", PREDICTIONS_JSON_FILENAME)
             elif (options["inference_split"] == "TEST"):
-                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTION_PROBABILITIES_WITH_CONFIDENCE_JSON_FILENAME)
+                predictions_path = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEURAL_TEST_INFERENCE_DIR, "evaluation", PREDICTIONS_JSON_FILENAME)
             else:
                 raise ValueError("Invalid inference split: {0}".format(options["inference_split"]))
             self.model = LoadPredictionsModel(predictions_path, self.dataset)
@@ -179,19 +173,21 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             for frame_index in frame_indexes:
                 frame_ids.append(self.dataset.get_frame_id(frame_index))
             self.batch_predictions = self.model.load_predictions(frame_ids)
-            self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["pred_boxes"].shape, device=get_torch_device())
-            for i in range(len(self.batch_predictions["pred_boxes"])):
-                self.formatted_batch_box_predictions[i] += self.batch_predictions["pred_boxes"][i]
+            self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["box_predictions"].shape, device=get_torch_device())
+            for i in range(len(self.batch_predictions["box_predictions"])):
+                self.formatted_batch_box_predictions[i] += self.batch_predictions["box_predictions"][i]
         else:
             self.batch_predictions = self.model(**{"pixel_values": pixel_values, "pixel_mask": pixel_mask})
             self.formatted_batch_box_predictions = torch.zeros(size=self.batch_predictions["pred_boxes"].shape, device=get_torch_device())
             for i in range(len(self.batch_predictions["pred_boxes"])):
                 self.formatted_batch_box_predictions[i] += box_cxcywh_to_xyxy(self.batch_predictions["pred_boxes"][i])
 
+            self.batch_predictions["class_predictions"] = torch.sigmoid(self.batch_predictions["logits"])
+
         if (self.application == "inference") and (not self._train):
             self.all_frame_indexes.extend(frame_indexes.cpu().tolist())
 
-        return self.format_batch_predictions(self.batch_predictions["logits"].detach().cpu(), self.formatted_batch_box_predictions.detach().cpu(), options=options), {}
+        return self.format_batch_predictions(self.batch_predictions["class_predictions"].detach().cpu(), self.formatted_batch_box_predictions.detach().cpu(), options=options), {}
 
     def internal_eval(self, data, options={}):
         if self.application == "learning":
@@ -216,48 +212,13 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         elif (self.application == "inference") and (not self._train):
             os.makedirs(self.evaluation_out_dir, exist_ok=True)
 
-            nms_keep_indices = agent_nms(
-                np.array(self.all_box_predictions),
-                np.array(self.all_class_predictions)[:, :, -1].reshape(len(self.all_class_predictions), NUM_QUERIES),
-                np.array(self.all_class_predictions)[:, :, :-1],
-            )
+            predictions = {
+                "frame_ids": [self.dataset.get_frame_id(frame_index) for frame_index in range(len(self.all_frame_indexes))],
+                "box_predictions": np.array(self.all_box_predictions)[:len(self.dataset)].reshape((len(self.dataset), NUM_QUERIES, 4)).tolist(),
+                "class_predictions": np.array(self.all_class_predictions)[:len(self.dataset)].reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1)).tolist(),
+            }
 
-            new_all_box_predictions = torch.zeros(size=(len(self.all_box_predictions), NUM_QUERIES, 4), dtype=torch.float32)
-            new_all_class_predictions = torch.zeros(size=((len(self.all_class_predictions), NUM_QUERIES, NUM_CLASSES + 1)), dtype=torch.float32)
-
-            # Construct the new prediction by keeping only the nms_keep_indices and padding with 0s otherwise.
-            for frame_index in range(len(self.all_frame_indexes)):
-                for box_index in range(NUM_QUERIES):
-                    if box_index in nms_keep_indices[frame_index]:
-                        new_all_box_predictions[frame_index][box_index] = torch.tensor(self.all_box_predictions[frame_index][box_index])
-                        new_all_class_predictions[frame_index][box_index] = torch.tensor(self.all_class_predictions[frame_index][box_index])
-
-            sorted_new_all_box_predictions = torch.zeros(size=new_all_box_predictions.size(), dtype=torch.float32)
-            sorted_new_all_class_predictions = torch.zeros(size=new_all_class_predictions.size(), dtype=torch.float32)
-
-            # Sort boxes by confidence.
-            sorted_indexes = torch.argsort(new_all_class_predictions[:, :, -1], descending=True)
-
-            for frame_index in range(len(self.all_frame_indexes)):
-                for box_index in range(NUM_QUERIES):
-                    sorted_new_all_box_predictions[frame_index][box_index] = new_all_box_predictions[frame_index][sorted_indexes[frame_index][box_index]]
-                    sorted_new_all_class_predictions[frame_index][box_index] = new_all_class_predictions[frame_index][sorted_indexes[frame_index][box_index]]
-
-            sorted_new_all_box_predictions.reshape((len(self.all_box_predictions), NUM_QUERIES * 4))
-            sorted_new_all_class_predictions.reshape((len(self.all_class_predictions), NUM_QUERIES * (NUM_CLASSES + 1)))
-
-            save_probabilities_and_labels(self.dataset, self.all_frame_indexes,
-                                          sorted_new_all_class_predictions.tolist(),
-                                          sorted_new_all_box_predictions.tolist(),
-                                          output_dir=self.evaluation_out_dir, from_logits=False)
-
-            if options["inference_split"] == "VALID":
-                calculate_metrics(self.dataset, self.evaluation_out_dir)
-
-            save_images_with_bounding_boxes(self.dataset, self.evaluation_out_dir, True,
-                                            NUM_SAVED_IMAGES, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD,
-                                            write_ground_truth=(options["inference_split"] == "VALID"),
-                                            test=(options["inference_split"] == "TEST"))
+            write_json_file(os.path.join(self.evaluation_out_dir, PREDICTIONS_JSON_FILENAME), predictions, indent=None)
 
     def internal_next_batch(self, options={}):
         self.current_batch = next(self.iterator, None)
@@ -297,17 +258,16 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         return formatted_gradients.to(get_torch_device())
 
-    def format_batch_predictions(self, logits, boxes, options={}):
+    def format_batch_predictions(self, class_predictions, box_predictions, options={}):
         self.batch_predictions_formatted = torch.zeros(size=(int(options["batch-size"]), NUM_NEUPSL_QUERIES, int(options["class-size"])), dtype=torch.float32)
 
-        batch_predictions_sorted_indexes = torch.argsort(logits[:, :, -1], descending=True)
+        batch_predictions_sorted_indexes = torch.argsort(class_predictions[:, :, -1], descending=True)
 
-        batch_prediction_probabilities = torch.sigmoid(logits)
-        batch_predictions = torch.cat((batch_prediction_probabilities, boxes), dim=-1)
+        batch_predictions = torch.cat((class_predictions, box_predictions), dim=-1)
 
-        for batch_index in range(len(batch_prediction_probabilities)):
+        for batch_index in range(len(class_predictions)):
             for box_index in range(NUM_NEUPSL_QUERIES):
-                if (self.application == "inference") and (batch_prediction_probabilities[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
+                if (self.application == "inference") and (class_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]][-1]) < BOX_CONFIDENCE_THRESHOLD:
                     continue
 
                 self.batch_predictions_formatted[batch_index][box_index] = batch_predictions[batch_index][batch_predictions_sorted_indexes[batch_index][box_index]]
@@ -348,28 +308,19 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
 class LoadPredictionsModel:
     def __init__(self, predictions_path, dataset):
-        self.predictions_path = predictions_path
-        self.predictions = load_json_file(self.predictions_path)
         self.dataset = dataset
+        self.predictions = load_json_file(predictions_path)
+
+        self.frame_ids = self.predictions["frame_ids"]
+        self.box_predictions = torch.tensor(self.predictions["box_predictions"])
+        self.class_predictions = torch.tensor(self.predictions["class_predictions"])
 
     def load_predictions(self, frame_ids):
-        frame_predictions = {"logits": [], "pred_boxes": []}
-        for batch_frame_index in range(len(frame_ids)):
-            frame_id = frame_ids[batch_frame_index]
-            frame_predictions["logits"].append([])
-            frame_predictions["pred_boxes"].append([])
-            for box in range(len(self.predictions[frame_id[0]][frame_id[1]])):
-                frame_predictions["logits"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["labels"])
-                frame_predictions["pred_boxes"][batch_frame_index].append(self.predictions[frame_id[0]][frame_id[1]][box]["bbox"])
+        frame_predictions = {}
+        frame_indexes = [self.dataset.get_frame_index(frame_id) for frame_id in frame_ids]
 
-            frame_predictions["pred_boxes"][batch_frame_index] = pixel_to_ratio_coordinates(
-                torch.tensor(frame_predictions["pred_boxes"][batch_frame_index], dtype=torch.float32),
-                self.dataset.image_height() / self.dataset.image_resize,
-                self.dataset.image_width() / self.dataset.image_resize).tolist()
-
-        frame_predictions["logits"] = torch.torch.tensor(frame_predictions["logits"], dtype=torch.float32, device=get_torch_device())
-        frame_predictions["logits"] = torch.log(frame_predictions["logits"] / (1 - frame_predictions["logits"]))
-        frame_predictions["pred_boxes"] = torch.tensor(frame_predictions["pred_boxes"], dtype=torch.float32, device=get_torch_device())
+        frame_predictions["box_predictions"] = self.box_predictions[frame_indexes].to(get_torch_device())
+        frame_predictions["class_predictions"] = self.class_predictions[frame_indexes].to(get_torch_device())
 
         return frame_predictions
 
