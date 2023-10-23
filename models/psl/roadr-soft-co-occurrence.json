@@ -33,12 +33,13 @@
 
       "Label(FrameID, BoundingBoxID, Class1) & !HardCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
       "Label(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
+      "Label(FrameID, BoundingBoxID, Class1) & !UncommonCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Label(FrameID, BoundingBoxID, Class2) .",
 
-      "Label(FrameID, BoundingBoxID, +Class) >= 1 . {Class: Action(Class)}",
+      "Label(FrameID, BoundingBoxID1, '8') & Label(FrameID, BoundingBoxID2, '8') & Label(FrameID, BoundingBoxID1, Class) -> Label(FrameID, BoundingBoxID2, Class) .",
 
       "Label(FrameID, BoundingBoxID, +Class) = 1 . {Class: Agent(Class)}",
-      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}",
-      "Label(FrameID, BoundingBoxID1, '8') & Label(FrameID, BoundingBoxID2, '8') & Label(FrameID, BoundingBoxID1, Class) -> Label(FrameID, BoundingBoxID2, Class) ."
+      "Label(FrameID, BoundingBoxID, +Class) >= 1 . {Class: Action(Class)}",
+      "Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') - Label(FrameID, BoundingBoxID, '9') . {Class: Location(Class)}"
     ]
   },
   "predicates": {
@@ -46,11 +47,11 @@
       "type": "DeepPredicate",
       "options": {
         "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
-        "entity-data-map-path": "../data/psl-data/experiment::tube-size-2/entity-data-map.txt",
+        "entity-data-map-path": "../data/psl-data/experiment::tube-size-4/entity-data-map.txt",
         "entity-argument-indexes": "0,1",
         "task-name": "task1",
         "class-size": 46,
-        "batch-size": 2,
+        "batch-size": 4,
         "max-frames": 0,
         "image-resize": 1.0,
         "alpha": 0.5,
@@ -61,10 +62,10 @@
       },
       "targets": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ]
       }
     },
@@ -74,80 +75,90 @@
       },
       "targets": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ]
       }
     },
     "HardCoOccurrence/2": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-4/hard-co-occurrence.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-4/hard-co-occurrence.txt"
         ]
       }
     },
     "SoftCoOccurrence/2": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/soft-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-4/soft-co-occurrence.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/soft-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-4/soft-co-occurrence.txt"
+        ]
+      }
+    },
+    "UncommonCoOccurrence/2": {
+      "observations": {
+        "learn": [
+          "../data/psl-data/experiment::tube-size-4/uncommon-co-occurrence.txt"
+        ],
+        "infer": [
+          "../data/psl-data/experiment::tube-size-4/uncommon-co-occurrence.txt"
         ]
       }
     },
     "BoundingBox/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
         ]
       }
     },
     "BoxConfidence/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-box-confidence.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-box-confidence.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-box-confidence.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-box-confidence.txt"
         ]
       }
     },
     "Agent/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
         ]
       }
     },
     "Location/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-location.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-location.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-location.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-location.txt"
         ]
       }
     },
     "Action/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-action.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-action.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-action.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-action.txt"
         ]
       }
     }

@@ -21,6 +21,7 @@ BASE_TEST_RGB_IMAGES_DIR = os.path.join(BASE_DATA_DIR, "test-rgb-images")
 TRAIN_VALIDATION_DATA_PATH = os.path.join(BASE_DATA_DIR, "road_trainval_v1.0.json")
 HARD_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "hard-co-occurrence.csv")
 SOFT_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "soft-co-occurrence.csv")
+UNCOMMON_CONSTRAINTS_PATH = os.path.join(BASE_DATA_DIR, "constraints", "uncommon-co-occurrence.csv")
 
 PREDICTIONS_JSON_FILENAME = "predictions.json"
 SUBMISSION_PREDICTIONS_PKL_FILENAME = "submission_predictions.pkl"

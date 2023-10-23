@@ -1,6 +1,5 @@
 import os
 
-import numpy as np
 import torch
 
 import torchvision
@@ -79,8 +78,7 @@ def agent_nms_mask(dataset, frame_ids, box_predictions, class_predictions, iou_t
 
             nms_keep_indexes = nms(boxes=class_pred_boxes, scores=class_pred_labels, iou_threshold=iou_threshold)
 
-            kept_indices = np.arange(len(box_predictions[frame_index]))[mask_frame_pred][mask_class_pred][nms_keep_indexes].tolist()
-            kept_indices = [kept_indices] if isinstance(kept_indices, int) else kept_indices
+            kept_indices = torch.arange(len(box_predictions[frame_index]))[mask_frame_pred][mask_class_pred][nms_keep_indexes]
             for index in kept_indices:
                 if mask_keep_detections[-1][index] == 0:
                     mask_keep_detections[-1][index] = 1

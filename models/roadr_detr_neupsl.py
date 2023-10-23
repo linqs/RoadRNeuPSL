@@ -214,8 +214,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
             predictions = {
                 "frame_ids": [self.dataset.get_frame_id(frame_index) for frame_index in range(len(self.all_frame_indexes))],
-                "box_predictions": np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)).tolist(),
-                "class_predictions": np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1)).tolist(),
+                "box_predictions": np.array(self.all_box_predictions)[:len(self.dataset)].reshape((len(self.dataset), NUM_QUERIES, 4)).tolist(),
+                "class_predictions": np.array(self.all_class_predictions)[:len(self.dataset)].reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1)).tolist(),
             }
 
             write_json_file(os.path.join(self.evaluation_out_dir, PREDICTIONS_JSON_FILENAME), predictions, indent=None)
