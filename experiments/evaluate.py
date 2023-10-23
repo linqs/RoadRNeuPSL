@@ -170,11 +170,11 @@ def calculate_metrics(dataset, output_dir):
 
     logging.info("Calculating metrics.")
 
-    logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
-    filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
-    filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
-    mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
-    logging.info("Mean average precision: %s" % mean_avg_prec)
+    # logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
+    # filtered_detections, filtered_detection_indexes = filter_detections(torch.Tensor(frame_indexes), torch.Tensor(box_predictions), torch.Tensor(class_predictions), IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD)
+    # filtered_detections_ground_truth = load_ground_truth_for_detections(dataset, filtered_detection_indexes)
+    # mean_avg_prec = mean_average_precision(filtered_detections_ground_truth, filtered_detections, IOU_THRESHOLD)
+    # logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
     precision, recall, f1 = precision_recall_f1(dataset, predicted_probabilities)
@@ -189,7 +189,7 @@ def calculate_metrics(dataset, output_dir):
     logging.info("Constraint violation dict: {}".format(constraint_violation_dict))
 
     metrics = {
-        "mean_avg_prec": mean_avg_prec,
+        # "mean_avg_prec": mean_avg_prec,
         "precision": precision,
         "recall": recall,
         "f1": f1,
