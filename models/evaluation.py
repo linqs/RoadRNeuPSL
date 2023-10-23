@@ -54,7 +54,7 @@ def filter_detections(frame_indexes, box_predictions, class_predictions, iou_thr
     return filtered_detections, filtered_detection_indexes
 
 
-def agent_nms(box_predictions, box_confidence_scores, class_predictions, iou_threshold=0.6, label_threshold=0.5):
+def agent_nms(box_predictions, box_confidence_scores, class_predictions, iou_threshold=0.5, label_threshold=0.5):
     """
     Applies non-maximum suppression to the detections using the agent class.
     :param box_predictions: The predicted bounding boxes.
