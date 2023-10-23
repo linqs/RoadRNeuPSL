@@ -217,13 +217,13 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
             os.makedirs(self.evaluation_out_dir, exist_ok=True)
 
             nms_keep_indices = agent_nms(
-                np.array(self.all_box_predictions).reshape((len(self.dataset), NUM_QUERIES, 4)),
-                np.array(self.all_class_predictions)[:, :, -1].reshape((len(self.dataset), NUM_QUERIES)),
-                np.array(self.all_class_predictions).reshape((len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1))[:, :, :-1],
+                np.array(self.all_box_predictions),
+                np.array(self.all_class_predictions)[:, :, -1].reshape(len(self.all_class_predictions), NUM_QUERIES),
+                np.array(self.all_class_predictions)[:, :, :-1],
             )
 
-            new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
-            new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
+            new_all_box_predictions = torch.zeros(size=(len(self.all_box_predictions), NUM_QUERIES, 4), dtype=torch.float32)
+            new_all_class_predictions = torch.zeros(size=((len(self.all_class_predictions), NUM_QUERIES, NUM_CLASSES + 1)), dtype=torch.float32)
 
             # Construct the new prediction by keeping only the nms_keep_indices and padding with 0s otherwise.
             for frame_index in range(len(self.all_frame_indexes)):
@@ -232,8 +232,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                         new_all_box_predictions[frame_index][box_index] = torch.tensor(self.all_box_predictions[frame_index][box_index])
                         new_all_class_predictions[frame_index][box_index] = torch.tensor(self.all_class_predictions[frame_index][box_index])
 
-            sorted_new_all_box_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, 4), dtype=torch.float32)
-            sorted_new_all_class_predictions = torch.zeros(size=(len(self.dataset), NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.float32)
+            sorted_new_all_box_predictions = torch.zeros(size=new_all_box_predictions.size(), dtype=torch.float32)
+            sorted_new_all_class_predictions = torch.zeros(size=new_all_class_predictions.size(), dtype=torch.float32)
 
             # Sort boxes by confidence.
             sorted_indexes = torch.argsort(new_all_class_predictions[:, :, -1], descending=True)
@@ -243,8 +243,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
                     sorted_new_all_box_predictions[frame_index][box_index] = new_all_box_predictions[frame_index][sorted_indexes[frame_index][box_index]]
                     sorted_new_all_class_predictions[frame_index][box_index] = new_all_class_predictions[frame_index][sorted_indexes[frame_index][box_index]]
 
-            sorted_new_all_box_predictions.reshape((len(self.dataset), NUM_QUERIES * 4))
-            sorted_new_all_class_predictions.reshape((len(self.dataset), NUM_QUERIES * (NUM_CLASSES + 1)))
+            sorted_new_all_box_predictions.reshape((len(self.all_box_predictions), NUM_QUERIES * 4))
+            sorted_new_all_class_predictions.reshape((len(self.all_class_predictions), NUM_QUERIES * (NUM_CLASSES + 1)))
 
             save_probabilities_and_labels(self.dataset, self.all_frame_indexes,
                                           sorted_new_all_class_predictions.tolist(),
