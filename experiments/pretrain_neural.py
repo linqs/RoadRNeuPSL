@@ -65,7 +65,7 @@ def run_setting(arguments, train_dataset, validation_dataset, parameters, parame
 
     if arguments.resume_from_checkpoint:
         logging.info("Loading model from checkpoint: %s" % (os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINED_MODEL_FILENAME),))
-        model.load_state_dict(torch.load(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINED_MODEL_FILENAME)))
+        model.load_state_dict(torch.load(os.path.join(BASE_RESULTS_DIR, arguments.task, parameters_string, NEURAL_TRAINED_MODEL_FILENAME), map_location=get_torch_device()))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=parameters["learning-rate"], weight_decay=parameters["weight-decay"])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step-size"], gamma=parameters["gamma"])
@@ -88,7 +88,7 @@ def main(arguments):
 
     logging.info("Loading Training Dataset")
     train_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["TRAIN"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
-                                 max_frames=arguments.max_frames)
+                                 max_frames=arguments.max_frames, use_transforms=arguments.use_transforms)
     validation_dataset = RoadRDataset(VIDEO_PARTITIONS[arguments.task]["VALID"], TRAIN_VALIDATION_DATA_PATH, arguments.image_resize,
                                       max_frames=arguments.max_frames)
 
@@ -122,8 +122,11 @@ def _load_args():
                         action="store", type=int, default=50,
                         help="Number of epochs to train for.")
     parser.add_argument("--resume-from-checkpoint", dest="resume_from_checkpoint",
-                        action="store", type=bool, default=False,
+                        action="store_true", default=False,
                         help="Resume training from the most recent checkpoint.")
+    parser.add_argument("--use-transforms", dest="use_transforms",
+                        action="store_true", default=False,
+                        help="Use training transforms.")
 
     arguments = parser.parse_args()
 

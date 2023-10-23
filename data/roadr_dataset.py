@@ -5,7 +5,11 @@ import sys
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
+from torchvision import tv_tensors
+from torchvision.transforms import v2
 from transformers import DetrImageProcessor
+
+import utils
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -28,10 +32,12 @@ class RoadRDataset(Dataset):
                  annotations_path,
                  image_resize,
                  max_frames=0,
-                 test=False):
+                 test=False,
+                 use_transforms=False):
         self.videos = videos
         self.annotations_path = annotations_path
         self.test = test
+        self.use_transforms = use_transforms
 
         self.base_rgb_images_dir = BASE_TEST_RGB_IMAGES_DIR if self.test else BASE_RGB_IMAGES_DIR
 
@@ -39,6 +45,12 @@ class RoadRDataset(Dataset):
         self.max_frames = max_frames
 
         self.processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50", size={"shortest_edge": self.image_height(), "longest_edge": self.image_width()})
+
+        self.transforms = v2.Compose([
+            v2.RandomIoUCrop(),
+            v2.Resize(size=(self.image_height(), self.image_width()), antialias=True),
+            v2.SanitizeBoundingBoxes()
+        ])
 
         self.annotations = None
         if not self.test:
@@ -51,6 +63,9 @@ class RoadRDataset(Dataset):
         self.load_labels = False
         self.load_frame_ids()
         logging.info("Total frames counted in all videos: {0}".format(len(self.frame_ids)))
+
+    def set_use_transforms(self, use_transforms):
+        self.use_transforms = use_transforms
 
     def load_frame_ids(self):
         for videoname in self.videos:
@@ -97,7 +112,37 @@ class RoadRDataset(Dataset):
                         continue
                     frame_labels[bounding_box_index][ORIGINAL_LABEL_MAPPING[label_type][int(label_id)][0]] = 1
 
-        return image['pixel_values'][0], image['pixel_mask'][0], frame_labels, frame_boxes
+        img = image['pixel_values'][0]
+        mask = image['pixel_mask'][0]
+        if self.use_transforms:
+            img, mask, frame_labels, frame_boxes = self.transform_frame(image, frame_labels, frame_boxes)
+
+        return img, mask, frame_labels, frame_boxes
+
+    def transform_frame(self, image, frame_labels, frame_boxes):
+        img = image['pixel_values'][0]
+        mask = image['pixel_mask'][0]
+        if self.use_transforms:
+            scaled_frame_boxes = utils.ratio_to_pixel_coordinates(frame_boxes, self.image_height(), self.image_width())
+            tv_frame_boxes = tv_tensors.BoundingBoxes(scaled_frame_boxes, format="XYXY", canvas_size=(self.image_height(), self.image_width()))
+            target = {"boxes": tv_frame_boxes, "labels": frame_labels, "masks": image['pixel_mask'][0]}
+            img = tv_tensors.Image(img)
+
+            transformed_img, transformed_target = self.transforms(img, target)
+
+            frame_labels = torch.zeros(size=(NUM_QUERIES, NUM_CLASSES + 1), dtype=torch.int8)
+            frame_boxes = torch.zeros(size=(NUM_QUERIES, 4), dtype=torch.float32)
+
+            for bounding_box_index, bounding_box in enumerate(transformed_target["boxes"]):
+                frame_boxes[bounding_box_index] = transformed_target["boxes"][bounding_box_index]
+                frame_labels[bounding_box_index] = transformed_target["labels"][bounding_box_index]
+
+            frame_boxes = utils.pixel_to_ratio_coordinates(frame_boxes, self.image_height(), self.image_width())
+
+            mask = transformed_target["masks"]
+            img = transformed_img
+
+        return img, mask, frame_labels, frame_boxes
 
     def image_height(self):
         return int(IMAGE_HEIGHT * self.image_resize)
