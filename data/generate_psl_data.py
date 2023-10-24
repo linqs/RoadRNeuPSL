@@ -81,7 +81,7 @@ def _load_args():
     parser = argparse.ArgumentParser(description="Generate Road-R PSL data.")
 
     parser.add_argument("--tube-size", dest="tubeSize",
-                        action="store", type=int, default=2,
+                        action="store", type=int, default=4,
                         help="The size of the tube used to generate the "
                              "symbolic data.")
 

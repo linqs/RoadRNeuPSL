@@ -43,7 +43,7 @@
       "type": "DeepPredicate",
       "options": {
         "model-path": "../models/roadr_detr_neupsl.py::RoadRDETRNeuPSL",
-        "entity-data-map-path": "../data/psl-data/experiment::tube-size-2/entity-data-map.txt",
+        "entity-data-map-path": "../data/psl-data/experiment::tube-size-4/entity-data-map.txt",
         "entity-argument-indexes": "0,1",
         "task-name": "task1",
         "class-size": 46,
@@ -51,80 +51,80 @@
         "max-frames": 0,
         "image-resize": 1.0,
         "alpha": 0.5,
-        "learning-rate": 1.0e-5,
+        "learning-rate": 1.0e-6,
         "weight-decay": 1.0e-5,
         "step-size": 500,
         "gamma": 0.1
       },
       "targets": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ]
       }
     },
     "Label/3": {
       "options": {
-        "integer": "false"
+        "Integer": "false"
       },
       "targets": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/entity-targets.txt"
+          "../data/psl-data/experiment::tube-size-4/entity-targets.txt"
         ]
       }
     },
     "HardCoOccurrence/2": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-4/hard-co-occurrence.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/hard-co-occurrence.txt"
+          "../data/psl-data/experiment::tube-size-4/hard-co-occurrence.txt"
         ]
       }
     },
     "BoundingBox/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-bounding-box.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-bounding-box.txt"
         ]
       }
     },
     "BoxConfidence/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-box-confidence.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-box-confidence.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-box-confidence.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-box-confidence.txt"
         ]
       }
     },
     "Agent/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-agent.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-agent.txt"
         ]
       }
     },
     "Location/1": {
       "observations": {
         "learn": [
-          "../data/psl-data/experiment::tube-size-2/classes-location.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-location.txt"
         ],
         "infer": [
-          "../data/psl-data/experiment::tube-size-2/classes-location.txt"
+          "../data/psl-data/experiment::tube-size-4/classes-location.txt"
         ]
       }
     }
