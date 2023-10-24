@@ -72,7 +72,7 @@
     },
     "Label/3": {
       "options": {
-        "integer": "false"
+        "Integer": "false"
       },
       "targets": {
         "learn": [
