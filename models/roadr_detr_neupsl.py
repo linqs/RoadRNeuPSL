@@ -55,6 +55,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         self.model = None
         self.dataset = None
+        self.labeled_video_names = None
         self.dataloader = None
         self.optimizer = None
         self.scheduler = None
@@ -81,7 +82,17 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.model_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR)
 
         if self.application == "learning":
-            self.dataset = RoadRDataset(VIDEO_PARTITIONS[options["task-name"]]["TRAIN"], TRAIN_VALIDATION_DATA_PATH,
+            self.labeled_video_names = VIDEO_PARTITIONS[options["task-name"]]["TRAIN"]
+
+            training_videos = None
+            if options["semi-supervised"] == "true":
+                training_videos = VIDEO_PARTITIONS[options["task-name"]]["ALL_TRAIN"]
+            else:
+                training_videos = VIDEO_PARTITIONS[options["task-name"]]["TRAIN"]
+
+            logging.info("Training videos: {0}".format(training_videos))
+
+            self.dataset = RoadRDataset(training_videos, TRAIN_VALIDATION_DATA_PATH,
                                         float(options["image-resize"]),
                                         max_frames=int(options["max-frames"]))
         else:
@@ -111,12 +122,13 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
         if self.application == "learning":
             if os.path.isfile(neural_trained_model_path):
+                logging.info("Loading pretrained model weights from: {0}".format(neural_trained_model_path))
                 self.model.load_state_dict(torch.load(neural_trained_model_path, map_location=get_torch_device()))
 
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(options["learning-rate"]), weight_decay=float(options["weight-decay"]))
             self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(options["step-size"]), gamma=float(options["gamma"]))
         else:
-            use_neural_trained_model = options["use-neural-trained-model"] == "true"
+            use_neural_trained_model = (options["use-neural-trained-model"] == "true")
 
             if (options["inference_split"] == "VALID") and use_neural_trained_model:
                 self.evaluation_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_VALID_INFERENCE_DIR,
@@ -154,8 +166,16 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.optimizer.zero_grad(set_to_none=True)
         self.batch_predictions["logits"].backward(structured_gradients, retain_graph=True)
 
-        frame_ids, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
-        loss, results = detr_loss(self.formatted_batch_box_predictions, self.batch_predictions["logits"], boxes, labels, model=self.model)
+        frame_indexes, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
+
+        # Only compute supervised loss of the model for frames that are in the labeled set.
+        for i, frame_index in enumerate(frame_indexes):
+            if self.dataset.get_frame_id(frame_index)[0] not in self.labeled_video_names:
+                labels[i] = torch.clone(self.batch_predictions["class_predictions"][i]).detach()
+                boxes[i] = torch.clone(self.formatted_batch_box_predictions[i]).detach()
+
+        loss, results = detr_loss(self.formatted_batch_box_predictions, self.batch_predictions["logits"], boxes, labels,
+                                  model=self.model)
 
         loss = (1 - float(options["alpha"])) * loss
         loss.backward(retain_graph=True)

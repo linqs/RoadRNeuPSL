@@ -130,6 +130,7 @@ def set_neural_predicate_options(psl_json, arguments):
     psl_json["predicates"]["Neural/3"]["options"]["evaluation-dir-name"] = arguments.evaluation_dir_name
     psl_json["predicates"]["Neural/3"]["options"]["use-neural-trained-model"] = arguments.use_neural_trained_model
     psl_json["predicates"]["Neural/3"]["options"]["load-predictions"] = arguments.load_predictions
+    psl_json["predicates"]["Neural/3"]["options"]["semi-supervised"] = arguments.semi_supervised
 
 
 def set_runtime_task(psl_json, learning, inference):
@@ -181,6 +182,9 @@ def _load_args():
     parser.add_argument("--no-learning", dest="no_learning",
                         action="store_true", default=False,
                         help="Turn off learning step.")
+    parser.add_argument("--semi-supervised", dest="semi_supervised",
+                        action="store_true", default=False,
+                        help="Turn on semi-supervised learning. This is only used for task 1.")
     parser.add_argument("--use-neural-trained-model", dest="use_neural_trained_model",
                         action="store_true", default=False,
                         help="Use the neural trained model.")
