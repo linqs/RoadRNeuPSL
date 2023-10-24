@@ -172,16 +172,17 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         frame_indexes, pixel_values, pixel_mask, labels, boxes = self.gpu_batch
 
         # Only compute supervised loss of the model for frames that are in the labeled set.
+        labeled_frames = []
         for i, frame_index in enumerate(frame_indexes):
             if self.dataset.get_frame_id(frame_index)[0] not in self.labeled_video_names:
-                labels[i] = torch.clone(self.batch_predictions["class_predictions"][i]).detach()
-                boxes[i] = torch.clone(self.formatted_batch_box_predictions[i]).detach()
+                labeled_frames.append(i)
 
-        loss, results = detr_loss(self.formatted_batch_box_predictions, self.batch_predictions["logits"], boxes, labels,
-                                  model=self.model)
-
-        loss = (1 - float(options["alpha"])) * loss
-        loss.backward(retain_graph=True)
+        if len(labeled_frames) > 0:
+            loss, results = detr_loss(self.formatted_batch_box_predictions[labeled_frames], self.batch_predictions["logits"][labeled_frames], boxes[labeled_frames], labels[labeled_frames], model=self.model)
+            loss = (1 - float(options["alpha"])) * loss
+            loss.backward(retain_graph=True)
+        else:
+            results = {"loss": 0.0}
 
         self.post_gradient_computation()
         self.optimizer.step()
