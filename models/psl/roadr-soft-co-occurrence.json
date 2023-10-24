@@ -12,9 +12,9 @@
     "inference.normalize": "false",
     "gradientdescent.scalestepsize": "false",
     "gradientdescent.stepsize": "1.0e-14",
-    "gradientdescent.trainingcomputeperiod": "5",
-    "gradientdescent.stopcomputeperiod": "5",
-    "gradientdescent.numsteps": "50",
+    "gradientdescent.trainingcomputeperiod": "1",
+    "gradientdescent.stopcomputeperiod": "1",
+    "gradientdescent.numsteps": "15",
     "gradientdescent.runfulliterations": "true",
     "gradientdescent.batchgenerator": "NeuralBatchGenerator"
   },

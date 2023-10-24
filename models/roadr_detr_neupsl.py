@@ -57,6 +57,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.dataset = None
         self.labeled_video_names = None
         self.dataloader = None
+        self.epoch = 0
         self.optimizer = None
         self.scheduler = None
 
@@ -82,6 +83,8 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.model_out_dir = os.path.join(BASE_RESULTS_DIR, options["task-name"], NEUPSL_TRAINED_MODEL_DIR)
 
         if self.application == "learning":
+            self.epoch = 0
+
             self.labeled_video_names = VIDEO_PARTITIONS[options["task-name"]]["TRAIN"]
 
             training_videos = None
@@ -226,6 +229,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
         self.next_batch()
 
     def internal_epoch_end(self, options={}):
+        self.epoch += 1
         if (self.application == "learning") and (self._train):
             self.scheduler.step()
             self.save()
@@ -252,6 +256,7 @@ class RoadRDETRNeuPSL(pslpython.deeppsl.model.DeepModel):
 
     def internal_save(self, options={}):
         os.makedirs(self.model_out_dir, exist_ok=True)
+        save_model_state(self.model, self.model_out_dir, "epoch_{}_".format(self.epoch) + NEUPSL_TRAINED_MODEL_FILENAME)
         save_model_state(self.model, self.model_out_dir, NEUPSL_TRAINED_MODEL_FILENAME)
 
     def train_mode(self, options = {}):
