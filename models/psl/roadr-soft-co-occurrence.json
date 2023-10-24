@@ -24,7 +24,8 @@
       "1.0: Neural(FrameID, BoundingBoxID, Class1) & !SoftCoOccurrence(Class1, Class2) & !BoundingBox(Class1) & !BoundingBox(Class2) & !BoxConfidence(Class1) & !BoxConfidence(Class2) -> !Neural(FrameID, BoundingBoxID, Class2) ^2",
 
       "1.0: Neural(FrameID, BoundingBoxID, +Class) = 1 ^2 {Class: Agent(Class)}",
-      "1.0: Label(FrameID, BoundingBoxID, +Class) >= 1 - Label(FrameID, BoundingBoxID, '8') - Label(FrameID, BoundingBoxID, '9') ^2 {Class: Location(Class)}"
+      "1.0: Neural(FrameID, BoundingBoxID, +Class) >= 1 ^2 {Class: Action(Class)}",
+      "1.0: Neural(FrameID, BoundingBoxID, +Class) >= 1 - Neural(FrameID, BoundingBoxID, '8') - Neural(FrameID, BoundingBoxID, '9') ^2 {Class: Location(Class)}"
     ]
   },
   "infer": {
