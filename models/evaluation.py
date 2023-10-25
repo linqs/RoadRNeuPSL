@@ -86,6 +86,30 @@ def agent_nms_mask(dataset, frame_ids, box_predictions, class_predictions, iou_t
     return mask_keep_detections
 
 
+def mask_large_detections(dataset, frame_ids, box_predictions, remove_threshold):
+    """
+    Masks detections that are larger than a given threshold.
+    :param dataset: Dataset for which the detections were computed.
+    :param frame_ids: List of frame ids (video name, frame name).
+    :param box_predictions: The predicted bounding boxes.
+    :param remove_threshold: Threshold for removing large detections.
+    :return: Integer mask of the kept detections.
+    """
+    mask_keep_detections = []
+    for frame_id in frame_ids:
+        frame_index = dataset.get_frame_index(frame_id)
+
+        mask_keep_detections.append([0] * len(box_predictions[frame_index]))
+
+        frame_pred_boxes = box_predictions[frame_index]
+
+        for box_index in range(len(frame_pred_boxes)):
+            if (frame_pred_boxes[box_index][2] - frame_pred_boxes[box_index][0]) * (frame_pred_boxes[box_index][3] - frame_pred_boxes[box_index][1]) < remove_threshold:
+                mask_keep_detections[-1][box_index] = 1
+
+    return mask_keep_detections
+
+
 def filter_map_pred_and_truth(dataset, frame_ids, box_predictions, class_predictions, iou_threshold, label_confidence_threshold, box_confidence_threshold):
     """
     Filters predictions using non-maximum suppression and returns the predictions and truth in the format

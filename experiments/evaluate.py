@@ -14,6 +14,7 @@ from models.evaluation import agent_nms_mask
 from models.evaluation import count_violated_constraints
 from models.evaluation import mean_average_precision
 from models.evaluation import precision_recall_f1
+from models.evaluation import mask_large_detections
 from models.evaluation import save_images_with_bounding_boxes
 from models.evaluation import sort_detections_in_frames
 from utils import load_constraint_file
@@ -27,8 +28,6 @@ from utils import HARD_CONSTRAINTS_PATH
 from utils import IOU_THRESHOLD
 from utils import LABEL_CONFIDENCE_THRESHOLD
 from utils import NEURAL_TEST_INFERENCE_DIR
-from utils import NEURAL_TRAINED_MODEL_DIR
-from utils import NEURAL_TRAINED_MODEL_FILENAME
 from utils import NEURAL_VALID_INFERENCE_DIR
 from utils import NUM_SAVED_IMAGES
 from utils import PREDICTIONS_JSON_FILENAME
@@ -45,9 +44,14 @@ def filter_predictions(dataset, predictions):
                                           torch.Tensor(predictions["class_predictions"]),
                                           IOU_THRESHOLD, 0.5, 0.5)
 
+    mask_removed_large_detections = mask_large_detections(dataset,
+                                                          predictions["frame_ids"],
+                                                          predictions["box_predictions"],
+                                                          0.4)
+
     for frame_index in range(len(predictions["class_predictions"])):
         for box_index in range(len(predictions["class_predictions"][frame_index])):
-            predictions["class_predictions"][frame_index][box_index][-1] *= mask_keep_detections[frame_index][box_index]
+            predictions["class_predictions"][frame_index][box_index][-1] *= mask_keep_detections[frame_index][box_index] * mask_removed_large_detections[frame_index][box_index]
 
     predictions["box_predictions"], predictions["class_predictions"] = sort_detections_in_frames(predictions["class_predictions"], predictions["box_predictions"])
 
@@ -57,13 +61,13 @@ def filter_predictions(dataset, predictions):
 def calculate_metrics(dataset, predictions, output_dir):
     logging.info("Calculating metrics.")
 
-    # logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
-    # mean_avg_prec = mean_average_precision(dataset,
-    #                                        predictions["frame_ids"],
-    #                                        torch.Tensor(predictions["box_predictions"]),
-    #                                        torch.Tensor(predictions["class_predictions"]),
-    #                                        IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
-    # logging.info("Mean average precision: %s" % mean_avg_prec)
+    logging.info("Calculating mean average precision at iou threshold of {}.".format(IOU_THRESHOLD))
+    mean_avg_prec = mean_average_precision(dataset,
+                                           predictions["frame_ids"],
+                                           torch.Tensor(predictions["box_predictions"]),
+                                           torch.Tensor(predictions["class_predictions"]),
+                                           IOU_THRESHOLD, LABEL_CONFIDENCE_THRESHOLD, BOX_CONFIDENCE_THRESHOLD)
+    logging.info("Mean average precision: %s" % mean_avg_prec)
 
     logging.info("Calculating precision, recall, and f1 at iou threshold of {}.".format(IOU_THRESHOLD))
     precision, recall, f1 = precision_recall_f1(dataset,
@@ -86,7 +90,7 @@ def calculate_metrics(dataset, predictions, output_dir):
     logging.info("Constraint violation dict: {}".format(violations[2]))
 
     metrics = {
-        # "mean_avg_prec": mean_avg_prec,
+        "mean_avg_prec": mean_avg_prec,
         "precision": precision,
         "recall": recall,
         "f1": f1,
