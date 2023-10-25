@@ -32,7 +32,7 @@ def output_prediction(arguments, predictions):
 
             labels = [LABEL_MAPPING[index] for index, label in enumerate(class_preds[:-1]) if label > arguments.label_threshold]
 
-            print("Box: %s" % (box,))
+            print("Box: %s Box Confidence: %f" % (box, class_preds[-1]))
             print("Labels: %s" % (labels,))
             if arguments.show_probabilities:
                 print("Probabilities: %s" % (class_preds[:-1],))
